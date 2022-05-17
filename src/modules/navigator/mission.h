@@ -103,6 +103,9 @@ public:
 	 * For a list of the different modes refer to mission_result.msg
 	 */
 	void set_execution_mode(const uint8_t mode);
+
+	int32_t _current_mission_index{-1};
+
 private:
 
 	void mission_init();
@@ -245,7 +248,7 @@ private:
 	uORB::Subscription	_mission_sub{ORB_ID(mission)};		/**< mission subscription */
 	mission_s		_mission {};
 
-	int32_t _current_mission_index{-1};
+	
 
 	// track location of planned mission landing
 	bool	_land_start_available{false};

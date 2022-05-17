@@ -1199,6 +1199,7 @@ void Navigator::check_traffic()
 	float horizontal_separation = NAVTrafficAvoidManned;
 	float vertical_separation = NAVTrafficAvoidManned;
 
+
 	while (changed) {
 
 		//vehicle_status_s vs{};
@@ -1240,7 +1241,8 @@ void Navigator::check_traffic()
 		float end_alt = tr.altitude + (d_vert / tr.hor_velocity) * tr.ver_velocity;
 
 		// Predict until the vehicle would have passed this system at its current speed
-		float prediction_distance = d_hor + 1000.0f;
+		float lookahead = 50.0f;
+		float prediction_distance = d_hor + lookahead;
 
 		// If the altitude is not getting close to us, do not calculate
 		// the horizontal separation.
@@ -1258,21 +1260,56 @@ void Navigator::check_traffic()
 			double end_lat, end_lon;
 			waypoint_from_heading_and_distance(tr.lat, tr.lon, tr.heading, prediction_distance, &end_lat, &end_lon);
 
-			//struct crosstrack_error_s cr;
+			//Check if mission is not takeoff or landing, if so only use proximal deconfliction and not trajectory
 
 			double d_d_hor = static_cast<double>(d_hor);
+			double d_d_ver = static_cast<double>(d_vert);
+			double d_lookahead = static_cast<double>(lookahead);
 			double d_horizontal_separation = static_cast<double>(horizontal_separation);
+			//double d_vertical_separation = static_cast<double>(vertical_separation);
 
-			mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-			mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-			mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to traffic %d", (int)d_d_hor);
+			if (_mission._current_mission_index >= 1)
+			{
+				takeoff_complete = true;
+				
+				float dist_to_projected_hor, dist_to_projected_vert;
+				get_distance_to_point_global_wgs84(lat, lon, alt,
+													end_lat, end_lon, tr.altitude, &dist_to_projected_hor, &dist_to_projected_vert);
+
+				d_dist_to_projected_hor = static_cast<double>(dist_to_projected_hor);
+				d_dist_to_projected_vert = static_cast<double>(dist_to_projected_vert);
+
+				mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
+				mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
+				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to traffic %3.1f", d_d_hor);
+				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to traffic %3.1f", d_d_ver);
+				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to projected traffic %3.1f", d_dist_to_projected_hor);
+				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to projected traffic %3.1f", d_dist_to_projected_vert);
+
+			} else {
+
+				takeoff_complete = false;
+
+				//because in critical flight mode, only use proximal deconfliction
+				d_dist_to_projected_hor = d_d_hor;
+				d_dist_to_projected_vert = d_d_ver;
+
+				//duplicate code to keep things together in the console
+				mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
+				mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
+				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to traffic %3.1f", d_dist_to_projected_hor);
+				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to traffic %3.1f", d_dist_to_projected_vert);
+
+			}
+
+			//struct crosstrack_error_s cr;
 
 			//Checks for separation encroachment
-			if (d_d_hor < d_horizontal_separation)
+			if (((int)takeoff_complete && (d_dist_to_projected_hor <= (d_horizontal_separation+d_lookahead))) || (d_d_hor < d_horizontal_separation))
 			{
 				int traffic_direction = math::degrees(tr.heading) + 180;
 				//int traffic_seperation = (int)fabsf(cr.distance);
-				int traffic_seperation = (int)d_d_hor;
+				int traffic_seperation = d_dist_to_projected_hor;
 
 				switch (_param_nav_traff_avoid.get()) {
 
@@ -1378,14 +1415,14 @@ void Navigator::check_traffic()
 
 				case 5: {
 						/*Active CDR*/
-						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Enabling active deconfliction! dst %f, hdg % d, \t",
+						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Enabling active deconfliction! dst %d, hdg % d, \t",
 							tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-							d_d_hor,
+							traffic_seperation,
 							traffic_direction);
 
 						mavlink_log_critical(&_mavlink_log_pub, "Separation violation, horizontal separation %f",d_d_hor)
 
-						deconflict(traffic_seperation,traffic_direction);
+						deconflict(d_dist_to_projected_hor,traffic_direction);
 
 					}
 				}

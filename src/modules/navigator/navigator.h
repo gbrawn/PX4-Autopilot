@@ -51,6 +51,7 @@
 #include "rtl.h"
 #include "takeoff.h"
 #include "vtol_takeoff.h"
+#include "mission.h"
 
 #include "navigation.h"
 
@@ -384,6 +385,7 @@ private:
 	bool		_pos_sp_triplet_updated{false};			/**< flags if position SP triplet needs to be published */
 	bool 		_pos_sp_triplet_published_invalid_once{false};	/**< flags if position SP triplet has been published once to UORB */
 	bool		_mission_result_updated{false};			/**< flags if mission result has seen an update */
+	bool        takeoff_complete{false};
 
 	Mission		_mission;			/**< class that handles the missions */
 	Loiter		_loiter;			/**< class that handles loiter */
@@ -413,6 +415,9 @@ private:
 
 	bool _mission_landing_in_progress{false};	/**< this flag gets set if the mission is currently executing on a landing pattern
 							 * if mission mode is inactive, this flag will be cleared after 2 seconds */
+
+	double d_dist_to_projected_hor;
+	double d_dist_to_projected_vert;
 
 	traffic_buffer_s _traffic_buffer{};
 
