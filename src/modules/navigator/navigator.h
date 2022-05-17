@@ -459,4 +459,5 @@ private:
 		(ParamFloat<px4::params::LNDMC_ALT_MAX>)   _param_lndmc_alt_max
 
 	)
+
 };

@@ -122,10 +122,11 @@ PARAM_DEFINE_FLOAT(NAV_MC_ALT_RAD, 0.8f);
  * @value 2 Return mode
  * @value 3 Land mode
  * @value 4 Position Hold mode
+ * @value 5 Active CDRcd 
  *
  * @group Mission
  */
-PARAM_DEFINE_INT32(NAV_TRAFF_AVOID, 1);
+PARAM_DEFINE_INT32(NAV_TRAFF_AVOID, 5);
 
 /**
  * Set NAV TRAFFIC AVOID RADIUS MANNED

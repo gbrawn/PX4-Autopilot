@@ -1306,7 +1306,7 @@ void Navigator::check_traffic()
 
 			//Checks for separation encroachment
 			if (((int)takeoff_complete && (d_dist_to_projected_hor <= (d_horizontal_separation+d_lookahead))) || (d_d_hor < d_horizontal_separation))
-			{
+			{	
 				int traffic_direction = math::degrees(tr.heading) + 180;
 				//int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_seperation = d_dist_to_projected_hor;
@@ -1420,9 +1420,28 @@ void Navigator::check_traffic()
 							traffic_seperation,
 							traffic_direction);
 
-						mavlink_log_critical(&_mavlink_log_pub, "Separation violation, horizontal separation %f",d_d_hor)
+						mavlink_log_critical(&_mavlink_log_pub, "Separation violation, horizontal separation %f",d_d_hor);
 
-						deconflict(d_dist_to_projected_hor,traffic_direction);
+						float self_cruising_speed = _gps_pos.vel_m_s;
+						float self_heading = get_local_position()->heading;
+
+						double relative_vel [2];
+
+						double d_tr_velocity = static_cast<double>(tr.hor_velocity);
+						double d_tr_heading = static_cast<double>(tr.heading);
+						double d_self_cruising_speed = static_cast<double>(self_cruising_speed);
+						double d_self_heading = static_cast<double>(self_heading);
+
+						MVP mvp(traffic_seperation, traffic_direction, d_self_cruising_speed, d_self_heading, d_tr_velocity, d_tr_heading);
+
+						mavlink_log_critical(&_mavlink_log_pub, "Traffic Velocity %f Traffic Heading %f", d_tr_velocity,d_tr_heading);
+						mavlink_log_critical(&_mavlink_log_pub, "Self Velocity %f Self Heading %f", d_self_cruising_speed, d_self_heading);
+
+						relative_vel[0] = d_self_cruising_speed*sin(d_self_heading) - d_tr_velocity*sin(d_tr_heading);
+						relative_vel[1] = d_self_cruising_speed*cos(d_self_heading) - d_tr_velocity*cos(d_tr_heading);
+
+						mavlink_log_critical(&_mavlink_log_pub, "Relative Velocity North %f",relative_vel[0]);
+						mavlink_log_critical(&_mavlink_log_pub, "Relative Velocity East %f",relative_vel[1]);
 
 					}
 				}
