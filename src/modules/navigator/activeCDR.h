@@ -1,0 +1,1 @@
+void deconflict(int separation, int heading);

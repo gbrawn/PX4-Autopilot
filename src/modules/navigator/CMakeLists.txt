@@ -50,6 +50,8 @@ px4_add_module(
 		geofence.cpp
 		follow_target.cpp
 		vtol_takeoff.cpp
+		activeCDR.cpp
+		enginefailure.cpp
 	DEPENDS
 		geo
 		landing_slope
