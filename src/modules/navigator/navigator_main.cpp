@@ -58,7 +58,6 @@
 #include <px4_platform_common/posix.h>
 #include <px4_platform_common/tasks.h>
 #include <systemlib/mavlink_log.h>
-#include "modules/navigator/activeCDR.h"
 
 using namespace time_literals;
 
@@ -1183,6 +1182,14 @@ void Navigator::check_traffic()
 	double lat = get_global_position()->lat;
 	double lon = get_global_position()->lon;
 	float alt = get_global_position()->alt;
+	float self_heading = get_local_position()->heading;
+	//float self_cruising_speed = _gps_pos.vel_m_s;
+	float self_velocity_north = _gps_pos.vel_n_m_s;
+	float self_velocity_east =  _gps_pos.vel_e_m_s;
+	float self_vertical_speed = _gps_pos.vel_d_m_s; //negative is up
+	std::array<float, 3> relative_vel;
+	std::array<float, 3> self_vel_vector;
+	std::array<float, 3> tr_vel_vector;
 
 	// TODO for non-multirotors predicting the future
 	// position as accurately as possible will become relevant
@@ -1240,9 +1247,10 @@ void Navigator::check_traffic()
 		// predict final altitude (positive is up) in prediction time frame
 		float end_alt = tr.altitude + (d_vert / tr.hor_velocity) * tr.ver_velocity;
 
+		
+
 		// Predict until the vehicle would have passed this system at its current speed
-		float lookahead = 50.0f;
-		float prediction_distance = d_hor + lookahead;
+		float lookahead = 50.0f; //s
 
 		// If the altitude is not getting close to us, do not calculate
 		// the horizontal separation.
@@ -1254,62 +1262,50 @@ void Navigator::check_traffic()
 		// ever be used in normal airspace this implementation would anyway be
 		// inappropriate as it should be replaced with a TCAS compliant solution.
 
+		tr_vel_vector[0] = tr.hor_velocity*sin(tr.heading);
+		tr_vel_vector[1] = tr.hor_velocity*cos(tr.heading);
+		tr_vel_vector[2] = tr.ver_velocity;
+		
+		self_vel_vector[0] = self_velocity_north;
+		self_vel_vector[1] = self_velocity_east;
+		self_vel_vector[2] = self_vertical_speed;
+
+		relative_vel[0] = self_vel_vector[0] - tr_vel_vector[0];
+		relative_vel[1] = self_vel_vector[1] - tr_vel_vector[1];
+		relative_vel[2] = self_vel_vector[2] - tr_vel_vector[2];
+
+		//projecting relative velocity vector by lookahead time
+		float dbar = lookahead * sqrt(relative_vel[0]*relative_vel[0] + relative_vel[1]*relative_vel[1]); //m
+
+		//get end points of dbar vector
+		double lat_target,lon_target;
+		waypoint_from_heading_and_distance(lat, lon, self_heading, dbar,
+					&lat_target, &lon_target);
+
+		//invoke crosstrack
+		crosstrack_error_s cr;
+		
+		//calculate traffic distance to dbar
+		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
 		if ((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) {
 
-			double end_lat, end_lon;
-			waypoint_from_heading_and_distance(tr.lat, tr.lon, tr.heading, prediction_distance, &end_lat, &end_lon);
-
 			//Check if mission is not takeoff or landing, if so only use proximal deconfliction and not trajectory
 
-			double d_d_hor = static_cast<double>(d_hor);
-			double d_d_ver = static_cast<double>(d_vert);
-			double d_lookahead = static_cast<double>(lookahead);
-			double d_horizontal_separation = static_cast<double>(horizontal_separation);
-			//double d_vertical_separation = static_cast<double>(vertical_separation);
+			double d_cr_distance = static_cast<double>(cr.distance);
+			double rel_vel_north = static_cast<double>(relative_vel[0]);
+			double rel_vel_east = static_cast<double>(relative_vel[1]);
 
-			if (_mission._current_mission_index >= 1)
-			{
-				takeoff_complete = true;
-				
-				float dist_to_projected_hor, dist_to_projected_vert;
-				get_distance_to_point_global_wgs84(lat, lon, alt,
-													end_lat, end_lon, tr.altitude, &dist_to_projected_hor, &dist_to_projected_vert);
+			mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
+			mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
+			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity North %f ", rel_vel_north);
+			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity East %f ", rel_vel_east);
 
-				d_dist_to_projected_hor = static_cast<double>(dist_to_projected_hor);
-				d_dist_to_projected_vert = static_cast<double>(dist_to_projected_vert);
-
-				mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-				mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to traffic %3.1f", d_d_hor);
-				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to traffic %3.1f", d_d_ver);
-				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to projected traffic %3.1f", d_dist_to_projected_hor);
-				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to projected traffic %3.1f", d_dist_to_projected_vert);
-
-			} else {
-
-				takeoff_complete = false;
-
-				//because in critical flight mode, only use proximal deconfliction
-				d_dist_to_projected_hor = d_d_hor;
-				d_dist_to_projected_vert = d_d_ver;
-
-				//duplicate code to keep things together in the console
-				mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-				mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-				mavlink_log_info(&_mavlink_log_pub, "Horizontal distance to traffic %3.1f", d_dist_to_projected_hor);
-				mavlink_log_info(&_mavlink_log_pub, "Vertical distance to traffic %3.1f", d_dist_to_projected_vert);
-
-			}
-
-			//struct crosstrack_error_s cr;
-
-			//Checks for separation encroachment
-			if (((int)takeoff_complete && (d_dist_to_projected_hor <= (d_horizontal_separation+d_lookahead))) || (d_d_hor < d_horizontal_separation))
+			//Checks for relative velocity vector encroachment or separation encroachment
+			if ((!cr.past_end && (fabs(cr.distance) <= horizontal_separation)) || (d_hor < horizontal_separation))
 			{	
-				int traffic_direction = math::degrees(tr.heading) + 180;
-				//int traffic_seperation = (int)fabsf(cr.distance);
-				int traffic_seperation = d_dist_to_projected_hor;
+				int traffic_seperation = (int)fabsf(cr.distance);
+				int traffic_direction = (int)(math::degrees(tr.heading)+180);
 
 				switch (_param_nav_traff_avoid.get()) {
 
@@ -1419,30 +1415,43 @@ void Navigator::check_traffic()
 							tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
 							traffic_seperation,
 							traffic_direction);
+						
+						double d_cr_bearing = static_cast<double>(cr.bearing);
 
-						mavlink_log_critical(&_mavlink_log_pub, "Separation violation, horizontal separation %f",d_d_hor);
+						std::array<double, 3> traffic_pos;
+   						std::array<double, 3> self_pos;
 
-						float self_cruising_speed = _gps_pos.vel_m_s;
-						float self_heading = get_local_position()->heading;
+						traffic_pos[0] = tr.lat;
+						traffic_pos[1] = tr.lon;
+						traffic_pos[2] = tr.altitude;
 
-						double relative_vel [2];
+						self_pos[0] = lat;
+						self_pos[1] = lon;
+						self_pos[2] = alt;
 
-						double d_tr_velocity = static_cast<double>(tr.hor_velocity);
-						double d_tr_heading = static_cast<double>(tr.heading);
-						double d_self_cruising_speed = static_cast<double>(self_cruising_speed);
-						double d_self_heading = static_cast<double>(self_heading);
+						mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
+						mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);
 
-						MVP mvp(traffic_seperation, traffic_direction, d_self_cruising_speed, d_self_heading, d_tr_velocity, d_tr_heading);
+						//invoke resolution here
+						resolution res(
+							self_pos,
+							traffic_pos,
+							horizontal_separation,
+							lookahead,
+							self_heading,
+							tr.heading
+						);
 
-						mavlink_log_critical(&_mavlink_log_pub, "Traffic Velocity %f Traffic Heading %f", d_tr_velocity,d_tr_heading);
-						mavlink_log_critical(&_mavlink_log_pub, "Self Velocity %f Self Heading %f", d_self_cruising_speed, d_self_heading);
+						double avoidance_lat, avoidance_lon, heading_delta;
+						res.get_avoidance_vector(&avoidance_lat, &avoidance_lon, &heading_delta);
 
-						relative_vel[0] = d_self_cruising_speed*sin(d_self_heading) - d_tr_velocity*sin(d_tr_heading);
-						relative_vel[1] = d_self_cruising_speed*cos(d_self_heading) - d_tr_velocity*cos(d_tr_heading);
+						//get mission id to return to
 
-						mavlink_log_critical(&_mavlink_log_pub, "Relative Velocity North %f",relative_vel[0]);
-						mavlink_log_critical(&_mavlink_log_pub, "Relative Velocity East %f",relative_vel[1]);
+						//switch to flight task here
 
+						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
+						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+						
 					}
 				}
 				

@@ -53,6 +53,8 @@
 #include "vtol_takeoff.h"
 #include "mission.h"
 
+#include "resolution.h"
+
 #include "navigation.h"
 
 #include "GeofenceBreachAvoidance/geofence_breach_avoidance.h"
@@ -80,6 +82,8 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/uORB.h>
+
+#include <array>
 
 using namespace time_literals;
 
