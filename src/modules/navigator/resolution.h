@@ -3,9 +3,15 @@
 
 #include <array>
 
+#include <uORB/uORB.h>
+#include <uORB/topics/vehicle_command.h>
+
 class resolution
 {
     public:
+
+    double _avoidance_lat;
+    double _avoidance_lon;
 
     private:
 
@@ -34,6 +40,8 @@ class resolution
         }
         
 
-        void get_avoidance_vector(double *avoidance_lat, double *avoidance_lon, double *heading_delta);
+        void get_avoidance_lat_lon(double *avoidance_lat, double *avoidance_lon, double *heading_delta);
+
+        void go_to_avoidance_lat_lon();
 
 };

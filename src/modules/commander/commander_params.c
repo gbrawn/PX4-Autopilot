@@ -641,7 +641,7 @@ PARAM_DEFINE_INT32(COM_ARM_MAG_STR, 2);
  * @bit 1 Enable override during offboard mode
  * @group Commander
  */
-PARAM_DEFINE_INT32(COM_RC_OVERRIDE, 1);
+PARAM_DEFINE_INT32(COM_RC_OVERRIDE, 0);
 
 /**
  * RC stick override threshold

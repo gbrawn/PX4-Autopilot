@@ -1222,6 +1222,26 @@ Commander::handle_command(const vehicle_command_s &cmd)
 		}
 		break;
 
+	case vehicle_command_s::VEHICLE_CMD_AVOID: {
+		if (TRANSITION_DENIED != main_state_transition(_status, commander_state_s::MAIN_STATE_AVOID, _status_flags,
+				_internal_state)) {
+			mavlink_log_info(&_mavlink_log_pub, "Enabling avoid mode!\t");
+			events::send(events::ID("commander_setting_avoidance_mode"), events::Log::Info,
+						"Enabling avoidance maneuver");
+			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
+
+		} else {
+			mavlink_log_critical(&_mavlink_log_pub, "Avoidance mode denied!\t");
+			/* EVENT
+				* @description Check for a valid position estimate
+				*/
+			events::send(events::ID("commander_setting_avoidance_mode_denied"), {events::Log::Critical, events::LogInternal::Info},
+						"Avoidance denied!");
+			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
+		}
+	}
+	break;
+
 	case vehicle_command_s::VEHICLE_CMD_NAV_PRECLAND: {
 			if (TRANSITION_DENIED != main_state_transition(_status, commander_state_s::MAIN_STATE_AUTO_PRECLAND, _status_flags,
 					_internal_state)) {
@@ -3443,6 +3463,7 @@ Commander::update_control_mode()
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_PRECLAND:
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION:
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER:
+	case vehicle_status_s::NAVIGATION_STATE_AVOID:
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF:
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_VTOL_TAKEOFF:
 		_vehicle_control_mode.flag_control_auto_enabled = true;

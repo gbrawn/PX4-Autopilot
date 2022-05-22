@@ -122,7 +122,7 @@ PARAM_DEFINE_FLOAT(NAV_MC_ALT_RAD, 0.8f);
  * @value 2 Return mode
  * @value 3 Land mode
  * @value 4 Position Hold mode
- * @value 5 Active CDRcd 
+ * @value 5 Active CDR 
  *
  * @group Mission
  */

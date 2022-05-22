@@ -54,8 +54,10 @@
 #include "mission.h"
 
 #include "resolution.h"
-
+#include "follow_target.h"
 #include "navigation.h"
+#include "avoid.h"
+
 
 #include "GeofenceBreachAvoidance/geofence_breach_avoidance.h"
 
@@ -90,7 +92,7 @@ using namespace time_literals;
 /**
  * Number of navigation modes that need on_active/on_inactive calls
  */
-#define NAVIGATOR_MODE_ARRAY_SIZE 8
+#define NAVIGATOR_MODE_ARRAY_SIZE 9
 
 class Navigator : public ModuleBase<Navigator>, public ModuleParams
 {
@@ -154,6 +156,7 @@ public:
 	 * Setters
 	 */
 	void set_can_loiter_at_sp(bool can_loiter) { _can_loiter_at_sp = can_loiter; }
+	void set_can_avoid_at_sp(bool can_avoid) { _can_avoid_at_sp = can_avoid; }
 	void set_position_setpoint_triplet_updated() { _pos_sp_triplet_updated = true; }
 	void set_mission_result_updated() { _mission_result_updated = true; }
 
@@ -171,7 +174,7 @@ public:
 	vehicle_status_s            *get_vstatus() { return &_vstatus; }
 
 	PrecLand *get_precland() { return &_precland; } /**< allow others, e.g. Mission, to use the precision land block */
-
+	
 	const vehicle_roi_s &get_vroi() { return _vroi; }
 
 	void reset_vroi() { _vroi = {}; }
@@ -242,10 +245,18 @@ public:
 	 */
 	void reset_triplets();
 
+	void goto_avoidance_setpoint(double avoidance_lat, double avoidance_lon);
 	/**
 	 *  Set position setpoint to safe defaults
 	 */
 	void reset_position_setpoint(position_setpoint_s &sp);
+
+	/**
+	 * @brief Set the avoidance setpoint object
+	 * 
+	 */
+
+	void set_avoidance_setpoint(position_setpoint_s& avoidance_setpoint, double avoidance_lat, double avoidance_lon);
 
 	/**
 	 * Get the target throttle
@@ -385,11 +396,13 @@ private:
 	hrt_abstime _last_geofence_check = 0;
 
 	bool		_geofence_violation_warning_sent{false};	/**< prevents spaming to mavlink */
-	bool		_can_loiter_at_sp{false};			/**< flags if current position SP can be used to loiter */
+	bool		_can_loiter_at_sp{false};
+	bool        _can_avoid_at_sp{false};		/**< flags if current position SP can be used to loiter */
 	bool		_pos_sp_triplet_updated{false};			/**< flags if position SP triplet needs to be published */
 	bool 		_pos_sp_triplet_published_invalid_once{false};	/**< flags if position SP triplet has been published once to UORB */
 	bool		_mission_result_updated{false};			/**< flags if mission result has seen an update */
 	bool        takeoff_complete{false};
+	bool 		in_conflict{false}; /**< Flags if vehicle is currently in conflict with another aircraft */
 
 	Mission		_mission;			/**< class that handles the missions */
 	Loiter		_loiter;			/**< class that handles loiter */
@@ -399,6 +412,7 @@ private:
 	PrecLand	_precland;			/**< class for handling precision land commands */
 	RTL 		_rtl;				/**< class that handles RTL */
 	FollowTarget	_follow_target;
+	Avoid		_avoid;
 
 	NavigatorMode *_navigation_mode{nullptr};	/**< abstract pointer to current navigation mode class */
 	NavigatorMode *_navigation_mode_array[NAVIGATOR_MODE_ARRAY_SIZE] {};	/**< array of navigation modes */

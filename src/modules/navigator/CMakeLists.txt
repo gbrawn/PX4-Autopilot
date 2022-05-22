@@ -52,6 +52,7 @@ px4_add_module(
 		vtol_takeoff.cpp
 		resolution.cpp
 		enginefailure.cpp
+		avoid.cpp
 	DEPENDS
 		geo
 		landing_slope

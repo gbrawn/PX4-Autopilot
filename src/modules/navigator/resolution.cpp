@@ -1,7 +1,7 @@
 #include "resolution.h"
 #include <systemlib/mavlink_log.h>
 
-void resolution::get_avoidance_vector(double *avoidance_lat, double *avoidance_lon, double *heading_delta)
+void resolution::get_avoidance_lat_lon(double *avoidance_lat, double *avoidance_lon, double *heading_delta)
 {   
 
     float relative_dist = sqrt(pow((self_pos[0] - traf_pos[0]),2) + pow((self_pos[1] - traf_pos[1]),2));

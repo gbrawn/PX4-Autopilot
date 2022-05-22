@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2018-2019 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,29 +30,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
+
 /**
  * @file FlightTaskAvoid.cpp
  */
 
 #include "FlightTaskAvoid.hpp"
 
-bool FlightTaskDescend::activate(const trajectory_setpoint_s &last_setpoint)
+bool FlightTaskAvoid::activate(vehicle_local_position_s last_setpoint)
 {
 	bool ret = FlightTask::activate(last_setpoint);
-	// stay level to minimize horizontal drift
-	_acceleration_setpoint = matrix::Vector3f(0.f, 0.f, NAN);
-	// keep heading
-	_yaw_setpoint = _yaw;
+
+	mavlink_log_info(&_mavlink_log_pub, "FlightTaskAvoid activate was called!");
+
 	return ret;
 }
 
-bool FlightTaskDescend::update()
+bool FlightTaskAvoid::update()
 {
 	bool ret = FlightTask::update();
 
-	if (PX4_ISFINITE(_velocity(2))) {
+	if (PX4_ISFINITE(_position(2))) {
 		// land with landspeed
-		_velocity_setpoint(2) = _param_mpc_land_speed.get();
+		_position_setpoint(2) = _param_mpc_land_speed.get();
 		_acceleration_setpoint(2) = NAN;
 
 	} else {

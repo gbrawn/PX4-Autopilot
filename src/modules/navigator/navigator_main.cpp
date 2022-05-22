@@ -78,7 +78,8 @@ Navigator::Navigator() :
 	_land(this),
 	_precland(this),
 	_rtl(this),
-	_follow_target(this)
+	_follow_target(this),
+	_avoid(this)
 {
 	/* Create a list of our possible navigation types */
 	_navigation_mode_array[0] = &_mission;
@@ -89,6 +90,7 @@ Navigator::Navigator() :
 	_navigation_mode_array[5] = &_precland;
 	_navigation_mode_array[6] = &_vtol_takeoff;
 	_navigation_mode_array[7] = &_follow_target;
+	_navigation_mode_array[8] = &_avoid;
 
 	_handle_back_trans_dec_mss = param_find("VT_B_DEC_MSS");
 	_handle_reverse_delay = param_find("VT_B_REV_DEL");
@@ -236,6 +238,8 @@ void Navigator::run()
 
 			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_REPOSITION) {
 
+				mavlink_log_critical(&_mavlink_log_pub, "Repositioning to Lat %f, Lon %f",cmd.param5, cmd.param6);
+
 				bool reposition_valid = true;
 
 				vehicle_global_position_s position_setpoint{};
@@ -258,7 +262,7 @@ void Navigator::run()
 					rep->previous.alt = get_global_position()->alt;
 
 
-					rep->current.type = position_setpoint_s::SETPOINT_TYPE_LOITER;
+					rep->current.type = position_setpoint_s::SETPOINT_TYPE_POSITION;
 
 					bool only_alt_change_requested = false;
 
@@ -343,6 +347,17 @@ void Navigator::run()
 
 					rep->next.valid = false;
 
+					//publish_position_setpoint_triplet();
+					//_pos_sp_triplet_updated = true;
+
+					double current_lat, current_lon, next_lat, next_lon;
+					current_lat = rep->current.lat;
+					current_lon = rep->current.lon;
+					next_lat = rep->next.lat;
+					next_lon = rep->next.lon;
+					mavlink_log_critical(&_mavlink_log_pub, "New target Lat %f, Lon %f",current_lat, current_lon);
+					mavlink_log_critical(&_mavlink_log_pub, "Next target Lat %f, Lon %f",next_lat, next_lon);
+
 				} else {
 					mavlink_log_critical(&_mavlink_log_pub, "Reposition is outside geofence\t");
 					events::send(events::ID("navigator_reposition_outside_geofence"), {events::Log::Error, events::LogInternal::Info},
@@ -350,6 +365,7 @@ void Navigator::run()
 				}
 
 				// CMD_DO_REPOSITION is acknowledged by commander
+
 
 			} else if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_ORBIT &&
 				   get_vstatus()->vehicle_type == vehicle_status_s::VEHICLE_TYPE_FIXED_WING) {
@@ -693,6 +709,11 @@ void Navigator::run()
 			_pos_sp_triplet_published_invalid_once = false;
 			navigation_mode_new = &_precland;
 			_precland.set_mode(PrecLandMode::Required);
+			break;
+
+		case vehicle_status_s::NAVIGATION_STATE_AVOID:
+			_pos_sp_triplet_published_invalid_once = false;
+			navigation_mode_new = &_avoid;
 			break;
 
 		/*case vehicle_status_s::NAVIGATION_STATE_AUTO_LANDENGFAIL:
@@ -1065,6 +1086,13 @@ void Navigator::reset_triplets()
 	_pos_sp_triplet_updated = true;
 }
 
+void Navigator::goto_avoidance_setpoint(double avoidance_lat, double avoidance_lon)
+{
+
+	set_avoidance_setpoint(_pos_sp_triplet.current,avoidance_lat,avoidance_lon);
+	_pos_sp_triplet_updated = true;
+}
+
 void Navigator::reset_position_setpoint(position_setpoint_s &sp)
 {
 	sp = position_setpoint_s{};
@@ -1078,6 +1106,21 @@ void Navigator::reset_position_setpoint(position_setpoint_s &sp)
 	sp.valid = false;
 	sp.type = position_setpoint_s::SETPOINT_TYPE_IDLE;
 	sp.disable_weather_vane = false;
+}
+
+void Navigator::set_avoidance_setpoint(position_setpoint_s &avoidance_sp, double avoidance_lat, double avoidance_lon)
+{
+	avoidance_sp = position_setpoint_s{};
+	avoidance_sp.timestamp = hrt_absolute_time();
+	avoidance_sp.lat = avoidance_lat;
+	avoidance_sp.lon = avoidance_lon;
+	avoidance_sp.loiter_radius = get_loiter_radius();
+	avoidance_sp.acceptance_radius = get_default_acceptance_radius();
+	avoidance_sp.cruising_speed = get_cruising_speed();
+	avoidance_sp.cruising_throttle = get_cruising_throttle();
+	avoidance_sp.valid = true;
+	avoidance_sp.type = position_setpoint_s::SETPOINT_TYPE_POSITION;
+	avoidance_sp.disable_weather_vane = false;
 }
 
 float Navigator::get_cruising_throttle()
@@ -1182,14 +1225,17 @@ void Navigator::check_traffic()
 	double lat = get_global_position()->lat;
 	double lon = get_global_position()->lon;
 	float alt = get_global_position()->alt;
+
 	float self_heading = get_local_position()->heading;
-	//float self_cruising_speed = _gps_pos.vel_m_s;
 	float self_velocity_north = _gps_pos.vel_n_m_s;
 	float self_velocity_east =  _gps_pos.vel_e_m_s;
 	float self_vertical_speed = _gps_pos.vel_d_m_s; //negative is up
+
 	std::array<float, 3> relative_vel;
 	std::array<float, 3> self_vel_vector;
 	std::array<float, 3> tr_vel_vector;
+	std::array<double, 3> traffic_pos;
+	std::array<double, 3> self_pos;
 
 	// TODO for non-multirotors predicting the future
 	// position as accurately as possible will become relevant
@@ -1205,7 +1251,6 @@ void Navigator::check_traffic()
 	float NAVTrafficAvoidManned = _param_nav_traff_a_radm.get();
 	float horizontal_separation = NAVTrafficAvoidManned;
 	float vertical_separation = NAVTrafficAvoidManned;
-
 
 	while (changed) {
 
@@ -1247,8 +1292,6 @@ void Navigator::check_traffic()
 		// predict final altitude (positive is up) in prediction time frame
 		float end_alt = tr.altitude + (d_vert / tr.hor_velocity) * tr.ver_velocity;
 
-		
-
 		// Predict until the vehicle would have passed this system at its current speed
 		float lookahead = 50.0f; //s
 
@@ -1262,6 +1305,7 @@ void Navigator::check_traffic()
 		// ever be used in normal airspace this implementation would anyway be
 		// inappropriate as it should be replaced with a TCAS compliant solution.
 
+		//Establish velocity vectors
 		tr_vel_vector[0] = tr.hor_velocity*sin(tr.heading);
 		tr_vel_vector[1] = tr.hor_velocity*cos(tr.heading);
 		tr_vel_vector[2] = tr.ver_velocity;
@@ -1273,6 +1317,15 @@ void Navigator::check_traffic()
 		relative_vel[0] = self_vel_vector[0] - tr_vel_vector[0];
 		relative_vel[1] = self_vel_vector[1] - tr_vel_vector[1];
 		relative_vel[2] = self_vel_vector[2] - tr_vel_vector[2];
+
+		//Establish position vectors
+		traffic_pos[0] = tr.lat;
+		traffic_pos[1] = tr.lon;
+		traffic_pos[2] = tr.altitude;
+
+		self_pos[0] = lat;
+		self_pos[1] = lon;
+		self_pos[2] = alt;
 
 		//projecting relative velocity vector by lookahead time
 		float dbar = lookahead * sqrt(relative_vel[0]*relative_vel[0] + relative_vel[1]*relative_vel[1]); //m
@@ -1306,6 +1359,7 @@ void Navigator::check_traffic()
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_direction = (int)(math::degrees(tr.heading)+180);
+				in_conflict = true;
 
 				switch (_param_nav_traff_avoid.get()) {
 
@@ -1418,17 +1472,6 @@ void Navigator::check_traffic()
 						
 						double d_cr_bearing = static_cast<double>(cr.bearing);
 
-						std::array<double, 3> traffic_pos;
-   						std::array<double, 3> self_pos;
-
-						traffic_pos[0] = tr.lat;
-						traffic_pos[1] = tr.lon;
-						traffic_pos[2] = tr.altitude;
-
-						self_pos[0] = lat;
-						self_pos[1] = lon;
-						self_pos[2] = alt;
-
 						mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
 						mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);
 
@@ -1443,22 +1486,34 @@ void Navigator::check_traffic()
 						);
 
 						double avoidance_lat, avoidance_lon, heading_delta;
-						res.get_avoidance_vector(&avoidance_lat, &avoidance_lon, &heading_delta);
-
-						//get mission id to return to
-
-						//switch to flight task here
+						res.get_avoidance_lat_lon(&avoidance_lat, &avoidance_lon, &heading_delta);
 
 						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
 						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+
+						//Ask the commander to go to avoidance position
+						vehicle_command_s vcmd = {};
+						vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
+						vcmd.param5 = avoidance_lat;
+						vcmd.param6 = avoidance_lon;
+						publish_vehicle_cmd(&vcmd);
+						break;
+
+						//goto_avoidance_setpoint(avoidance_lat, avoidance_lon);
 						
+						//Struct for new mission item
+
+						//get mission id to return to
+						//switch to flight task here
+
+
+
 					}
 				}
 				
 			}
 
 		}
-
 		changed = _traffic_sub.updated();
 	}
 }

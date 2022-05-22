@@ -1,6 +1,6 @@
-/****************************************************************************
+/***************************************************************************
  *
- *   Copyright (c) 2017-2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2014 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,29 +30,42 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-
 /**
- * @file FlightTaskOrbit.hpp
+ * @file loiter.h
  *
- * Flight task for orbiting in a circle around a target position
+ * Helper class to loiter
  *
- * @author Matthias Grob <maetugr@gmail.com>
+ * @author Julian Oes <julian@oes.ch>
  */
 
 #pragma once
 
-#include "FlightTask.hpp"
-#include <systemlib/mavlink_log.h>
+#include "navigator_mode.h"
+#include "mission_block.h"
 
-class FlightTaskAvoid : public FlightTask
+#include <px4_platform_common/module_params.h>
+
+class Avoid : public MissionBlock, public ModuleParams
 {
-	public:
-		FlightTaskAvoid() = default;
-		virtual ~FlightTaskAvoid() = default;
-	
-		bool update();
-		bool activate(vehicle_local_position_setpoint_s last_setpoint);
+public:
+	Avoid(Navigator *navigator);
+	~Avoid() = default;
 
-	private:
-		float _origin_z{0.f};
+	void on_inactive() override;
+	void on_activation() override;
+	void on_active() override;
+
+private:
+	/**
+	 * Use the stored reposition location of the navigator
+	 * to move to a new location.
+	 */
+	void reposition();
+
+	/**
+	 * Set the position to hold based on the current local position
+	 */
+	void set_loiter_position();
+
+	bool _loiter_pos_set{false};
 };

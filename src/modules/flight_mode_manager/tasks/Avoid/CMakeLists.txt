@@ -32,8 +32,8 @@
 ############################################################################
 
 px4_add_library(FlightTaskAuto
-	FlightTaskAuto.cpp
+	FlightTaskAvoid.cpp
 )
 
-target_link_libraries(FlightTaskAuto PUBLIC avoidance FlightTask FlightTaskUtility)
-target_include_directories(FlightTaskAuto PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(FlightTaskAvoid PUBLIC FlightTask)
+target_include_directories(FlightTaskAvoid PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

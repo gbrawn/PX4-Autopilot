@@ -158,6 +158,13 @@ main_state_transition(const vehicle_status_s &status, const main_state_t new_mai
 		break;
 
 	case commander_state_s::MAIN_STATE_AUTO_FOLLOW_TARGET:
+	case commander_state_s::MAIN_STATE_AVOID:
+		/* need global position estimate */
+		if (status_flags.global_position_valid) {
+			ret = TRANSITION_CHANGED;
+		}
+
+		break;
 	case commander_state_s::MAIN_STATE_ORBIT:
 
 		/* Follow and orbit only implemented for multicopter */
@@ -563,6 +570,10 @@ bool set_nav_state(vehicle_status_s &status, actuator_armed_s &armed, commander_
 					   vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF : vehicle_status_s::NAVIGATION_STATE_AUTO_VTOL_TAKEOFF;
 		}
 
+		break;
+
+	case commander_state_s::MAIN_STATE_AVOID:
+		status.nav_state = vehicle_status_s::NAVIGATION_STATE_AVOID;
 		break;
 
 	case commander_state_s::MAIN_STATE_AUTO_LAND:
