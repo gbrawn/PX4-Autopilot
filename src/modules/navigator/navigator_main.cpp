@@ -1483,20 +1483,21 @@ void Navigator::check_traffic()
 							tr.heading
 						);
 
-						double avoidance_lat, avoidance_lon, heading_delta;
-						res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
-
-						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
-						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
-
-						//Set reposition triplet to avoidance lat/lon
-						position_setpoint_triplet_s *rep = get_reposition_triplet();
-						*rep = *(get_position_setpoint_triplet());
-						rep->current.lat = avoidance_lat;
-						rep->current.lon = avoidance_lon;
-
-						if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
+						//only command avoidance when in navigation auto mission mode
+						if (_vstatus.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION)
 						{
+							double avoidance_lat, avoidance_lon, heading_delta;
+							res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
+
+							mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
+							mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+
+							//Set reposition triplet to avoidance lat/lon
+							position_setpoint_triplet_s *rep = get_reposition_triplet();
+							*rep = *(get_position_setpoint_triplet());
+							rep->current.lat = avoidance_lat;
+							rep->current.lon = avoidance_lon;
+
 							vehicle_command_s vcmd = {};
 							vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
 							publish_vehicle_cmd(&vcmd);

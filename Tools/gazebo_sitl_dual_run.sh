@@ -111,12 +111,16 @@ if [ -z ${SCRIPT} ]; then
 		exit 1
 	fi
 	#for 50040 / 50041
-	spawn_model ${vehicle_model} 0 -30 86
-	spawn_model ${vehicle_model} 1 32 -88
+	#spawn_model ${vehicle_model} 0 -30 86
+	#spawn_model ${vehicle_model} 1 32 -88
 
 	#for big1 / big2
-	#spawn_model ${vehicle_model} 0 110.5 44.6
-	#spawn_model ${vehicle_model} 1 -139.7 42.4
+	spawn_model ${vehicle_model} 0 110.5 44.6
+	spawn_model ${vehicle_model} 1 -139.7 42.4
+
+	#for headon_n / headon_s
+	spawn_model ${vehicle_model} 0 101.31686390573347 -71.23617497795765
+	spawn_model ${vehicle_model} 1 45.239329987347936 111.24628827413868
 
  	#while [ $n -lt $num_vehicles ]; do
 		#spawn_model ${vehicle_model} $n

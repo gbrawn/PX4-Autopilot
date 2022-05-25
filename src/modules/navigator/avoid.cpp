@@ -64,7 +64,7 @@ Avoid::on_active()
 		_navigator->publish_vehicle_cmd(&vcmd);
 	}
 
-	_navigator->check_traffic();
+	//_navigator->check_traffic();
 }
 
 void
