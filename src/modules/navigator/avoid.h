@@ -51,7 +51,7 @@ public:
 	Avoid(Navigator *navigator);
 	~Avoid() = default;
 
-	void on_inactive() override;
+	//void on_inactive() override;
 	void on_activation() override;
 	void on_active() override;
 
@@ -60,12 +60,19 @@ private:
 	 * Use the stored reposition location of the navigator
 	 * to move to a new location.
 	 */
+
+	struct position_setpoint_triplet_s *rep;
+	struct position_setpoint_triplet_s *pos_sp_triplet;
+
+	bool avoid_complete{false};
+
+	//float distance_to_target;
+
 	void reposition();
 
-	/**
-	 * Set the position to hold based on the current local position
-	 */
-	void set_loiter_position();
+	bool is_avoid_complete();
 
-	bool _loiter_pos_set{false};
+	orb_advert_t	_mavlink_log_pub{nullptr};
+
+	orb_advert_t *get_mavlink_log_pub() { return &_mavlink_log_pub; }
 };

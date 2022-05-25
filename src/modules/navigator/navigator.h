@@ -244,8 +244,6 @@ public:
 	 *  Set triplets to invalid
 	 */
 	void reset_triplets();
-
-	void goto_avoidance_setpoint(double avoidance_lat, double avoidance_lon);
 	/**
 	 *  Set position setpoint to safe defaults
 	 */
@@ -337,6 +335,9 @@ public:
 
 	void 		calculate_breaking_stop(double &lat, double &lon, float &yaw);
 
+	bool 		in_conflict{false}; /**< Flags if vehicle is currently in conflict with another aircraft */
+	bool		predicted_conflict{false};
+
 private:
 
 	struct traffic_buffer_s {
@@ -402,7 +403,7 @@ private:
 	bool 		_pos_sp_triplet_published_invalid_once{false};	/**< flags if position SP triplet has been published once to UORB */
 	bool		_mission_result_updated{false};			/**< flags if mission result has seen an update */
 	bool        takeoff_complete{false};
-	bool 		in_conflict{false}; /**< Flags if vehicle is currently in conflict with another aircraft */
+
 
 	Mission		_mission;			/**< class that handles the missions */
 	Loiter		_loiter;			/**< class that handles loiter */

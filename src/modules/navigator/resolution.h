@@ -15,6 +15,7 @@ class resolution
 
     private:
 
+    crosstrack_error_s crosstrack;
     float lookahead_time;
     float horizontal_protection_zone;
     float self_heading;
@@ -24,13 +25,15 @@ class resolution
     std::array<double, 3> self_pos;
 
     public:
-        resolution(std::array<double, 3> tr_pos,
+        resolution(crosstrack_error_s cr,
+                   std::array<double, 3> tr_pos,
                    std::array<double, 3> slf_pos,
                    float horizontal_separation,
                    float lkahd_time,
                    float slf_heading,
                    float traffic_heading)
         {
+            crosstrack = cr;
             horizontal_protection_zone = horizontal_separation;
             lookahead_time = lkahd_time;
             traf_pos = tr_pos;
@@ -40,8 +43,6 @@ class resolution
         }
         
 
-        void get_avoidance_lat_lon(double *avoidance_lat, double *avoidance_lon, double *heading_delta);
-
-        void go_to_avoidance_lat_lon();
+        void resolve_predicted_conflict(double *avoidance_lat, double *avoidance_lon, double *heading_delta);
 
 };

@@ -30,14 +30,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-/**
- * @file loiter.cpp
- *
- * Helper class to loiter
- *
- * @author Julian Oes <julian@oes.ch>
- * @author Anton Babushkin <anton.babushkin@me.com>
- */
 
 #include "avoid.h"
 #include "navigator.h"
@@ -46,23 +38,14 @@ Avoid::Avoid(Navigator *navigator) :
 	MissionBlock(navigator),
 	ModuleParams(navigator)
 {
-}
-
-void
-Avoid::on_inactive()
-{
-	_loiter_pos_set = false;
+	rep = _navigator->get_reposition_triplet();
+	pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 }
 
 void
 Avoid::on_activation()
 {
-	if (_navigator->get_reposition_triplet()->current.valid) {
-		reposition();
-
-	} else {
-		set_loiter_position();
-	}
+	reposition();
 }
 
 void
@@ -72,63 +55,16 @@ Avoid::on_active()
 		reposition();
 	}
 
-	// reset the loiter position if we get disarmed
-	if (_navigator->get_vstatus()->arming_state != vehicle_status_s::ARMING_STATE_ARMED) {
-		_loiter_pos_set = false;
-	}
-}
-
-void
-Avoid::set_loiter_position()
-{
-	if (_navigator->get_vstatus()->arming_state != vehicle_status_s::ARMING_STATE_ARMED &&
-	    _navigator->get_land_detected()->landed) {
-
-		// Not setting loiter position if disarmed and landed, instead mark the current
-		// setpoint as invalid and idle (both, just to be sure).
-
-		_navigator->set_can_loiter_at_sp(false);
-		_navigator->get_position_setpoint_triplet()->current.type = position_setpoint_s::SETPOINT_TYPE_IDLE;
-		_navigator->set_position_setpoint_triplet_updated();
-		_loiter_pos_set = false;
-		return;
-
-	} else if (_loiter_pos_set) {
-		// Already set, nothing to do.
-		return;
+	avoid_complete = is_avoid_complete();
+	if (avoid_complete)
+	{
+		vehicle_command_s vcmd = {};
+		mavlink_log_info(&_mavlink_log_pub, "Conflict cleared, restarting mission");
+		vcmd.command = vehicle_command_s::VEHICLE_CMD_MISSION_START;
+		_navigator->publish_vehicle_cmd(&vcmd);
 	}
 
-	_loiter_pos_set = true;
-
-	position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
-
-	if (_navigator->get_land_detected()->landed) {
-		_mission_item.nav_cmd = NAV_CMD_IDLE;
-
-	} else {
-		if (pos_sp_triplet->current.valid && pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER) {
-			setLoiterItemFromCurrentPositionSetpoint(&_mission_item);
-
-		} else {
-			if (_navigator->get_vstatus()->vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING) {
-				setLoiterItemFromCurrentPositionWithBreaking(&_mission_item);
-
-			} else {
-				setLoiterItemFromCurrentPosition(&_mission_item);
-			}
-		}
-
-	}
-
-	// convert mission item to current setpoint
-	pos_sp_triplet->current.velocity_valid = false;
-	pos_sp_triplet->previous.valid = false;
-	mission_apply_limitation(_mission_item);
-	mission_item_to_position_setpoint(_mission_item, &pos_sp_triplet->current);
-	pos_sp_triplet->next.valid = false;
-
-	_navigator->set_can_loiter_at_sp(pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER);
-	_navigator->set_position_setpoint_triplet_updated();
+	_navigator->check_traffic();
 }
 
 void
@@ -139,13 +75,12 @@ Avoid::reposition()
 		return;
 	}
 
-	struct position_setpoint_triplet_s *rep = _navigator->get_reposition_triplet();
+	//struct position_setpoint_triplet_s *rep = _navigator->get_reposition_triplet();
 
 	if (rep->current.valid) {
-		// set loiter position based on reposition command
+		// set position based on reposition command
 
 		// convert mission item to current setpoint
-		struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 		pos_sp_triplet->current.velocity_valid = false;
 		pos_sp_triplet->previous.yaw = _navigator->get_local_position()->heading;
 		pos_sp_triplet->previous.lat = _navigator->get_global_position()->lat;
@@ -154,10 +89,34 @@ Avoid::reposition()
 		memcpy(&pos_sp_triplet->current, &rep->current, sizeof(rep->current));
 		pos_sp_triplet->next.valid = false;
 
-		_navigator->set_can_loiter_at_sp(pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER);
+		_navigator->set_can_loiter_at_sp(false);
 		_navigator->set_position_setpoint_triplet_updated();
 
 		// mark this as done
 		memset(rep, 0, sizeof(*rep));
+	}
+}
+
+bool
+Avoid::is_avoid_complete()
+{
+
+	int current_lat = (int)((_navigator->get_global_position()->lat)*1E4);
+	int current_lon = (int)((_navigator->get_global_position()->lon)*1E4);
+
+	int target_lat = (int)((pos_sp_triplet->current.lat)*1E4);
+	int target_lon = (int)((pos_sp_triplet->current.lon)*1E4);
+
+	//get_distance_to_next_waypoint(double lat_now, double lon_now, double lat_next, double lon_next);
+
+	if ((current_lat == target_lat) && (current_lon == target_lon))
+	{
+		avoid_complete = true;
+		return avoid_complete;
+
+	} else {
+
+		avoid_complete = false;
+		return avoid_complete;
 	}
 }

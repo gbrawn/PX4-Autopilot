@@ -1086,13 +1086,6 @@ void Navigator::reset_triplets()
 	_pos_sp_triplet_updated = true;
 }
 
-void Navigator::goto_avoidance_setpoint(double avoidance_lat, double avoidance_lon)
-{
-
-	set_avoidance_setpoint(_pos_sp_triplet.current,avoidance_lat,avoidance_lon);
-	_pos_sp_triplet_updated = true;
-}
-
 void Navigator::reset_position_setpoint(position_setpoint_s &sp)
 {
 	sp = position_setpoint_s{};
@@ -1106,21 +1099,6 @@ void Navigator::reset_position_setpoint(position_setpoint_s &sp)
 	sp.valid = false;
 	sp.type = position_setpoint_s::SETPOINT_TYPE_IDLE;
 	sp.disable_weather_vane = false;
-}
-
-void Navigator::set_avoidance_setpoint(position_setpoint_s &avoidance_sp, double avoidance_lat, double avoidance_lon)
-{
-	avoidance_sp = position_setpoint_s{};
-	avoidance_sp.timestamp = hrt_absolute_time();
-	avoidance_sp.lat = avoidance_lat;
-	avoidance_sp.lon = avoidance_lon;
-	avoidance_sp.loiter_radius = get_loiter_radius();
-	avoidance_sp.acceptance_radius = get_default_acceptance_radius();
-	avoidance_sp.cruising_speed = get_cruising_speed();
-	avoidance_sp.cruising_throttle = get_cruising_throttle();
-	avoidance_sp.valid = true;
-	avoidance_sp.type = position_setpoint_s::SETPOINT_TYPE_POSITION;
-	avoidance_sp.disable_weather_vane = false;
 }
 
 float Navigator::get_cruising_throttle()
@@ -1354,12 +1332,29 @@ void Navigator::check_traffic()
 			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity North %f ", rel_vel_north);
 			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity East %f ", rel_vel_east);
 
+			//Checks if previous iteration is already in deconfliction
+			//If previous is false, then it's false and is reset next iter
+			//bool is_in_deconfliction = predicted_conflict;
+
+			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation)) {
+				predicted_conflict = true;
+			} else {
+				predicted_conflict = false;
+			}
+
+			if (d_hor < horizontal_separation) {
+				in_conflict = true;
+			} else {
+				in_conflict = false;
+			}
+
+			//Do not re-engage deconfliction if already deconflicting
+
 			//Checks for relative velocity vector encroachment or separation encroachment
-			if ((!cr.past_end && (fabs(cr.distance) <= horizontal_separation)) || (d_hor < horizontal_separation))
+			if (predicted_conflict)
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_direction = (int)(math::degrees(tr.heading)+180);
-				in_conflict = true;
 
 				switch (_param_nav_traff_avoid.get()) {
 
@@ -1465,6 +1460,8 @@ void Navigator::check_traffic()
 
 				case 5: {
 						/*Active CDR*/
+						//Ask the commander to go to avoidance position
+
 						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Enabling active deconfliction! dst %d, hdg % d, \t",
 							tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
 							traffic_seperation,
@@ -1477,6 +1474,7 @@ void Navigator::check_traffic()
 
 						//invoke resolution here
 						resolution res(
+							cr,
 							self_pos,
 							traffic_pos,
 							horizontal_separation,
@@ -1486,31 +1484,28 @@ void Navigator::check_traffic()
 						);
 
 						double avoidance_lat, avoidance_lon, heading_delta;
-						res.get_avoidance_lat_lon(&avoidance_lat, &avoidance_lon, &heading_delta);
+						res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
 
 						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
 						mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
 
-						//Ask the commander to go to avoidance position
-						vehicle_command_s vcmd = {};
-						vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
-						vcmd.param5 = avoidance_lat;
-						vcmd.param6 = avoidance_lon;
-						publish_vehicle_cmd(&vcmd);
+						//Set reposition triplet to avoidance lat/lon
+						position_setpoint_triplet_s *rep = get_reposition_triplet();
+						*rep = *(get_position_setpoint_triplet());
+						rep->current.lat = avoidance_lat;
+						rep->current.lon = avoidance_lon;
+
+						if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
+						{
+							vehicle_command_s vcmd = {};
+							vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
+							publish_vehicle_cmd(&vcmd);
+						}
+
 						break;
-
-						//goto_avoidance_setpoint(avoidance_lat, avoidance_lon);
-						
-						//Struct for new mission item
-
-						//get mission id to return to
-						//switch to flight task here
-
-
 
 					}
 				}
-				
 			}
 
 		}
