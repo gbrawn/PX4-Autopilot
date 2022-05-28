@@ -575,8 +575,6 @@ void Navigator::run()
 			_pos_sp_triplet_published_invalid_once = false;
 
 			_mission.set_execution_mode(mission_result_s::MISSION_EXECUTION_MODE_NORMAL);
-			predicted_conflict = false;
-			in_conflict = false;
 			navigation_mode_new = &_mission;
 
 			break;
@@ -1208,7 +1206,6 @@ void Navigator::check_traffic()
 	float self_velocity_east =  _gps_pos.vel_e_m_s;
 	float self_vertical_speed = _gps_pos.vel_d_m_s; //negative is up
 
-	std::array<float, 3> relative_vel;
 	std::array<float, 3> self_vel_vector;
 	std::array<float, 3> tr_vel_vector;
 	std::array<double, 3> traffic_pos;
@@ -1291,10 +1288,6 @@ void Navigator::check_traffic()
 		self_vel_vector[1] = self_velocity_east;
 		self_vel_vector[2] = self_vertical_speed;
 
-		relative_vel[0] = self_vel_vector[0] - tr_vel_vector[0];
-		relative_vel[1] = self_vel_vector[1] - tr_vel_vector[1];
-		relative_vel[2] = self_vel_vector[2] - tr_vel_vector[2];
-
 		//Establish position vectors
 		traffic_pos[0] = tr.lat;
 		traffic_pos[1] = tr.lon;
@@ -1304,8 +1297,8 @@ void Navigator::check_traffic()
 		self_pos[1] = lon;
 		self_pos[2] = alt;
 
-		//projecting relative velocity vector by lookahead time
-		float dbar = lookahead * sqrt(relative_vel[0]*relative_vel[0] + relative_vel[1]*relative_vel[1]); //m
+		//projecting velocity vector by lookahead time
+		float dbar = lookahead * self_vel_vector[2];
 
 		//get end points of dbar vector
 		double lat_target,lon_target;
@@ -1316,46 +1309,14 @@ void Navigator::check_traffic()
 		crosstrack_error_s cr;
 		
 		//calculate traffic distance to dbar
-
-		mavlink_log_info(&_mavlink_log_pub, "Traffic lat %f, lon %f", tr.lat,tr.lon);
-		mavlink_log_info(&_mavlink_log_pub, "Self now lat %f, lon %f", lat,lon);
-		mavlink_log_info(&_mavlink_log_pub, "Self end lat %f, lon %f", lat_target, lon_target);
-
 		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
-		if ((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) {
-
-			//Check if mission is not takeoff or landing, if so only use proximal deconfliction and not trajectory
+		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) && (alt > 5.0f)) {
 
 			double d_cr_distance = static_cast<double>(cr.distance);
-			double rel_vel_north = static_cast<double>(relative_vel[0]);
-			double rel_vel_east = static_cast<double>(relative_vel[1]);
-
-			mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-			mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity North %f ", rel_vel_north);
-			mavlink_log_info(&_mavlink_log_pub, "Relative Velocity East %f ", rel_vel_east);
-
-			//Checks if previous iteration is already in deconfliction
-			//If previous is false, then it's false and is reset next iter
-			//bool is_in_deconfliction = predicted_conflict;
-
-			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation)) {
-				predicted_conflict = true;
-			} else {
-				predicted_conflict = false;
-			}
-
-			if (d_hor < horizontal_separation) {
-				in_conflict = true;
-			} else {
-				in_conflict = false;
-			}
-
-			//Do not re-engage deconfliction if already deconflicting
 
 			//Checks for relative velocity vector encroachment or separation encroachment
-			if (predicted_conflict)
+			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation))
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_direction = (int)(math::degrees(tr.heading)+180);
@@ -1472,6 +1433,9 @@ void Navigator::check_traffic()
 							traffic_direction);
 						
 						double d_cr_bearing = static_cast<double>(cr.bearing);
+
+						mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
+						mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
 
 						mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
 						mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);

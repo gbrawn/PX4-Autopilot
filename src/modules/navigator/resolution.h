@@ -20,6 +20,7 @@ class resolution
     float horizontal_protection_zone;
     float self_heading;
     float traf_heading;
+    float buffer = 5.0f;
 
     std::array<double, 3> traf_pos;
     std::array<double, 3> self_pos;

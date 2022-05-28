@@ -335,9 +335,6 @@ public:
 
 	void 		calculate_breaking_stop(double &lat, double &lon, float &yaw);
 
-	bool 		in_conflict{false}; /**< Flags if vehicle is currently in conflict with another aircraft */
-	bool		predicted_conflict{false};
-
 private:
 
 	struct traffic_buffer_s {

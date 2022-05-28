@@ -6,7 +6,7 @@ void resolution::resolve_predicted_conflict(double *avoidance_lat, double *avoid
 
     float relative_dist = sqrt(pow((self_pos[0] - traf_pos[0]),2) + pow((self_pos[1] - traf_pos[1]),2));
 
-    float lookahead_dist = sqrt(pow(relative_dist,2) + pow(horizontal_protection_zone,2));
+    float lookahead_dist = sqrt(pow(relative_dist,2) + pow((horizontal_protection_zone+buffer),2));
 
     //Calculate change of heading
     float min_heading_change_to_avoid = atan((horizontal_protection_zone / (relative_dist)));
