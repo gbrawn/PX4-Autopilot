@@ -40,6 +40,7 @@ Avoid::Avoid(Navigator *navigator) :
 {
 	rep = _navigator->get_reposition_triplet();
 	pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+	return_to_mission = *(_navigator->get_position_setpoint_triplet());
 }
 
 void
@@ -57,14 +58,15 @@ Avoid::on_active()
 
 	avoid_complete = is_avoid_complete();
 	if (avoid_complete)
-	{
+	{	
+
+		//continue_mission();
 		vehicle_command_s vcmd = {};
 		mavlink_log_info(&_mavlink_log_pub, "Conflict cleared, restarting mission");
-		vcmd.command = vehicle_command_s::VEHICLE_CMD_MISSION_START;
+		vcmd.command = vehicle_command_s::VEHICLE_CMD_RETURN_TO_MISSION;
 		_navigator->publish_vehicle_cmd(&vcmd);
 	}
 
-	//_navigator->check_traffic();
 }
 
 void
@@ -78,7 +80,6 @@ Avoid::reposition()
 	//struct position_setpoint_triplet_s *rep = _navigator->get_reposition_triplet();
 
 	if (rep->current.valid) {
-		// set position based on reposition command
 
 		// convert mission item to current setpoint
 		pos_sp_triplet->current.velocity_valid = false;
@@ -86,10 +87,16 @@ Avoid::reposition()
 		pos_sp_triplet->previous.lat = _navigator->get_global_position()->lat;
 		pos_sp_triplet->previous.lon = _navigator->get_global_position()->lon;
 		pos_sp_triplet->previous.alt = _navigator->get_global_position()->alt;
+		pos_sp_triplet->next = _navigator->get_reposition_triplet()->next;
+		//pos_sp_triplet->next.lon = _navigator->get_reposition_triplet()->next.lon;
 		memcpy(&pos_sp_triplet->current, &rep->current, sizeof(rep->current));
-		pos_sp_triplet->next.valid = false;
+		pos_sp_triplet->next.valid = true;
 
-		_navigator->set_can_loiter_at_sp(false);
+		mavlink_log_info(&_mavlink_log_pub, "Next wp lat %f",pos_sp_triplet->next.lat);
+		mavlink_log_info(&_mavlink_log_pub, "Next wp lon %f",pos_sp_triplet->next.lon);
+
+
+		//_navigator->set_can_loiter_at_sp(false);
 		_navigator->set_position_setpoint_triplet_updated();
 
 		// mark this as done
@@ -100,7 +107,7 @@ Avoid::reposition()
 bool
 Avoid::is_avoid_complete()
 {
-
+	//Check if aircraft is close to target lat/lon
 	int current_lat = (int)((_navigator->get_global_position()->lat)*1E4);
 	int current_lon = (int)((_navigator->get_global_position()->lon)*1E4);
 
@@ -119,4 +126,11 @@ Avoid::is_avoid_complete()
 		avoid_complete = false;
 		return avoid_complete;
 	}
+}
+
+void
+Avoid::continue_mission()
+{
+
+
 }

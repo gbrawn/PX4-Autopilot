@@ -9,9 +9,9 @@ void resolution::resolve_predicted_conflict(double *avoidance_lat, double *avoid
     float lookahead_dist = sqrt(pow(relative_dist,2) + pow(horizontal_protection_zone,2));
 
     //Calculate change of heading
-    float min_heading_change_to_avoid = atan(horizontal_protection_zone / (relative_dist));
+    float min_heading_change_to_avoid = atan((horizontal_protection_zone / (relative_dist)));
 
-    if (crosstrack.distance > 0)
+    if (min_heading_change_to_avoid > 0.79f)
     {
         //command heading change against the direction of relative velocity
         float new_heading = self_heading + min_heading_change_to_avoid;

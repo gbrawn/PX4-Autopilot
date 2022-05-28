@@ -158,6 +158,13 @@ main_state_transition(const vehicle_status_s &status, const main_state_t new_mai
 		break;
 
 	case commander_state_s::MAIN_STATE_AUTO_FOLLOW_TARGET:
+	case commander_state_s::MAIN_STATE_RETURN_TO_MISSION:
+		/* need global position estimate */
+		if (status_flags.global_position_valid) {
+			ret = TRANSITION_CHANGED;
+		}
+		break;
+
 	case commander_state_s::MAIN_STATE_AVOID:
 		/* need global position estimate */
 		if (status_flags.global_position_valid) {
@@ -431,6 +438,57 @@ bool set_nav_state(vehicle_status_s &status, actuator_armed_s &armed, commander_
 		} else if (!stay_in_failsafe) {
 			// normal mission operation if there's no need to stay in failsafe
 			status.nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION;
+		}
+
+		break;
+
+	case commander_state_s::MAIN_STATE_RETURN_TO_MISSION:
+
+		//Same checks as entering navigation moe
+
+		if (is_armed && check_invalid_pos_nav_state(status, old_failsafe, mavlink_log_pub, status_flags, false, true)) {
+			// nothing to do - everything done in check_invalid_pos_nav_state
+		} else if (status_flags.vtol_transition_failure) {
+
+			set_quadchute_nav_state(status, armed, status_flags, quadchute_act);
+
+		} else if (status.mission_failure) {
+			status.nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RTL;
+
+		} else if (status.data_link_lost && data_link_loss_act_configured
+			   && is_armed && !landed) {
+			// Data link lost, data link loss reaction configured -> do configured reaction
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, event_failsafe_reason_t::no_datalink);
+			set_link_loss_nav_state(status, armed, status_flags, internal_state, data_link_loss_act, 0);
+
+		} else if (status.rc_signal_lost && !(param_com_rcl_except & RCLossExceptionBits::RCL_EXCEPT_MISSION)
+			   && status_flags.rc_signal_found_once && is_armed && !landed) {
+			// RC link lost, rc loss not disabled in mission, RC was used before -> RC loss reaction after delay
+			// Safety pilot expects to be able to take over by RC in case anything unexpected happens
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, event_failsafe_reason_t::no_rc);
+			set_link_loss_nav_state(status, armed, status_flags, internal_state, rc_loss_act, param_com_rcl_act_t);
+
+		} else if (status.rc_signal_lost && !(param_com_rcl_except & RCLossExceptionBits::RCL_EXCEPT_MISSION)
+			   && status.data_link_lost && !data_link_loss_act_configured
+			   && is_armed && !landed) {
+			// All links lost, no data link loss reaction configured -> immediately do RC loss reaction
+			// Lost all communication, by default it's considered unsafe to continue the mission
+			// This is only reached when flying mission completely without RC (it was not present since boot)
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, event_failsafe_reason_t::no_rc_and_no_datalink);
+			set_link_loss_nav_state(status, armed, status_flags, internal_state, rc_loss_act, 0);
+
+		} else if (status.rc_signal_lost && (param_com_rcl_except & RCLossExceptionBits::RCL_EXCEPT_MISSION)
+			   && status.data_link_lost && !data_link_loss_act_configured
+			   && is_armed && !landed
+			   && mission_finished) {
+			// All links lost, all link loss reactions disabled -> return after mission finished
+			// Pilot disabled all reactions, finish mission but then return to avoid lost vehicle
+			enable_failsafe(status, old_failsafe, mavlink_log_pub, event_failsafe_reason_t::no_rc_and_no_datalink);
+			set_link_loss_nav_state(status, armed, status_flags, internal_state, link_loss_actions_t::AUTO_RTL, 0);
+
+		} else if (!stay_in_failsafe) {
+			// normal mission operation if there's no need to stay in failsafe
+			status.nav_state = vehicle_status_s::NAVIGATION_STATE_RETURN_TO_MISSION;
 		}
 
 		break;

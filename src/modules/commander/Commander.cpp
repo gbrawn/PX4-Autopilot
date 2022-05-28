@@ -1242,6 +1242,42 @@ Commander::handle_command(const vehicle_command_s &cmd)
 	}
 	break;
 
+	case vehicle_command_s::VEHICLE_CMD_RETURN_TO_MISSION: {
+
+			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_DENIED;
+
+			// check if current mission and first item are valid
+			if (_status_flags.auto_mission_available) {
+
+				// requested first mission item valid
+				if (PX4_ISFINITE(cmd.param1) && (cmd.param1 >= -1) && (cmd.param1 < _mission_result_sub.get().seq_total)) {
+
+					// switch to AUTO_MISSION and ARM
+					if ((TRANSITION_DENIED != main_state_transition(_status, commander_state_s::MAIN_STATE_AUTO_MISSION, _status_flags,
+							_internal_state))
+					    && (TRANSITION_DENIED != arm(arm_disarm_reason_t::mission_start))) {
+
+						cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
+
+					} else {
+						cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
+						mavlink_log_critical(&_mavlink_log_pub, "Return to mission denied\t");
+						/* EVENT
+						 * @description Check for a valid position estimate
+						 */
+						events::send(events::ID("commander_return_to_mission_denied"), {events::Log::Critical, events::LogInternal::Info},
+							     "Return to mission denied");
+					}
+				}
+
+			} else {
+				mavlink_log_critical(&_mavlink_log_pub, "Return to mission denied! No valid mission\t");
+				events::send(events::ID("commander_return_to_mission_denied_no_mission"), {events::Log::Critical, events::LogInternal::Info},
+					     "Return to mission denied! No valid mission");
+			}
+		}
+		break;
+
 	case vehicle_command_s::VEHICLE_CMD_NAV_PRECLAND: {
 			if (TRANSITION_DENIED != main_state_transition(_status, commander_state_s::MAIN_STATE_AUTO_PRECLAND, _status_flags,
 					_internal_state)) {

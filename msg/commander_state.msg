@@ -10,14 +10,16 @@ uint8 MAIN_STATE_AUTO_RTL           = 5
 uint8 MAIN_STATE_ACRO               = 6
 uint8 MAIN_STATE_OFFBOARD           = 7
 uint8 MAIN_STATE_STAB               = 8
-# LEGACY RATTITUDE                  = 9
+uint8 MAIN_STATE_AVOID              = 9
 uint8 MAIN_STATE_AUTO_TAKEOFF       = 10
 uint8 MAIN_STATE_AUTO_LAND          = 11
 uint8 MAIN_STATE_AUTO_FOLLOW_TARGET = 12
 uint8 MAIN_STATE_AUTO_PRECLAND      = 13
 uint8 MAIN_STATE_ORBIT              = 14
-uint8 MAIN_STATE_AUTO_VTOL_TAKEOFF  = 15
-uint8 MAIN_STATE_MAX                = 16
+uint8 MAIN_STATE_RETURN_TO_MISSION  = 15
+uint8 MAIN_STATE_AUTO_VTOL_TAKEOFF  = 16
+uint8 MAIN_STATE_MAX                = 17
+
 
 uint8 main_state
 

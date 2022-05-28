@@ -347,17 +347,6 @@ void Navigator::run()
 
 					rep->next.valid = false;
 
-					//publish_position_setpoint_triplet();
-					//_pos_sp_triplet_updated = true;
-
-					double current_lat, current_lon, next_lat, next_lon;
-					current_lat = rep->current.lat;
-					current_lon = rep->current.lon;
-					next_lat = rep->next.lat;
-					next_lon = rep->next.lon;
-					mavlink_log_critical(&_mavlink_log_pub, "New target Lat %f, Lon %f",current_lat, current_lon);
-					mavlink_log_critical(&_mavlink_log_pub, "Next target Lat %f, Lon %f",next_lat, next_lon);
-
 				} else {
 					mavlink_log_critical(&_mavlink_log_pub, "Reposition is outside geofence\t");
 					events::send(events::ID("navigator_reposition_outside_geofence"), {events::Log::Error, events::LogInternal::Info},
@@ -578,6 +567,16 @@ void Navigator::run()
 			_pos_sp_triplet_published_invalid_once = false;
 
 			_mission.set_execution_mode(mission_result_s::MISSION_EXECUTION_MODE_NORMAL);
+			navigation_mode_new = &_mission;
+
+			break;
+
+		case vehicle_status_s::NAVIGATION_STATE_RETURN_TO_MISSION:
+			_pos_sp_triplet_published_invalid_once = false;
+
+			_mission.set_execution_mode(mission_result_s::MISSION_EXECUTION_MODE_NORMAL);
+			predicted_conflict = false;
+			in_conflict = false;
 			navigation_mode_new = &_mission;
 
 			break;
@@ -1317,6 +1316,11 @@ void Navigator::check_traffic()
 		crosstrack_error_s cr;
 		
 		//calculate traffic distance to dbar
+
+		mavlink_log_info(&_mavlink_log_pub, "Traffic lat %f, lon %f", tr.lat,tr.lon);
+		mavlink_log_info(&_mavlink_log_pub, "Self now lat %f, lon %f", lat,lon);
+		mavlink_log_info(&_mavlink_log_pub, "Self end lat %f, lon %f", lat_target, lon_target);
+
 		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
 		if ((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) {
@@ -1484,7 +1488,7 @@ void Navigator::check_traffic()
 						);
 
 						//only command avoidance when in navigation auto mission mode
-						if (_vstatus.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION)
+						if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
 						{
 							double avoidance_lat, avoidance_lon, heading_delta;
 							res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
@@ -1495,12 +1499,15 @@ void Navigator::check_traffic()
 							//Set reposition triplet to avoidance lat/lon
 							position_setpoint_triplet_s *rep = get_reposition_triplet();
 							*rep = *(get_position_setpoint_triplet());
+							rep->next.lat = rep->current.lat;
+							rep->next.lon = rep->current.lon;
 							rep->current.lat = avoidance_lat;
 							rep->current.lon = avoidance_lon;
 
 							vehicle_command_s vcmd = {};
 							vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
 							publish_vehicle_cmd(&vcmd);
+
 						}
 
 						break;

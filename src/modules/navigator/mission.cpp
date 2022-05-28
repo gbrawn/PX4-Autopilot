@@ -183,6 +183,7 @@ Mission::on_inactivation()
 
 	/* reset so current mission item gets restarted if mission was paused */
 	_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+
 }
 
 void
@@ -349,6 +350,9 @@ Mission::set_execution_mode(const uint8_t mode)
 
 		switch (_mission_execution_mode) {
 		case mission_result_s::MISSION_EXECUTION_MODE_NORMAL:
+		
+		case mission_result_s::MISSION_EXECUTION_MODE_RETURN_TO_MISSION:
+		
 		case mission_result_s::MISSION_EXECUTION_MODE_FAST_FORWARD:
 			if (mode == mission_result_s::MISSION_EXECUTION_MODE_REVERSE) {
 				// command a transition if in vtol mc mode
@@ -769,6 +773,13 @@ Mission::set_mission_items()
 	if (item_contains_position(_mission_item)) {
 		switch (_mission_execution_mode) {
 		case mission_result_s::MISSION_EXECUTION_MODE_NORMAL:
+		case mission_result_s::MISSION_EXECUTION_MODE_RETURN_TO_MISSION: {
+
+			//position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+
+			break;
+		}
 		case mission_result_s::MISSION_EXECUTION_MODE_FAST_FORWARD: {
 				/* force vtol land */
 				if (_navigator->force_vtol() && _mission_item.nav_cmd == NAV_CMD_LAND) {

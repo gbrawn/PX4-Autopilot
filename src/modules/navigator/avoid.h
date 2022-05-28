@@ -63,12 +63,14 @@ private:
 
 	struct position_setpoint_triplet_s *rep;
 	struct position_setpoint_triplet_s *pos_sp_triplet;
+	struct position_setpoint_triplet_s return_to_mission;
 
 	bool avoid_complete{false};
 
-	//float distance_to_target;
 
 	void reposition();
+
+	void continue_mission();
 
 	bool is_avoid_complete();
 
