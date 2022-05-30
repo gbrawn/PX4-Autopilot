@@ -1320,162 +1320,167 @@ void Navigator::check_traffic()
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_direction = (int)(math::degrees(tr.heading)+180);
+				int traffic_bearing = (int)(math::degrees(cr.bearing));
 
-				switch (_param_nav_traff_avoid.get()) {
+				//if traffic is behind, don't switch on deconfliction
+				if ((traffic_bearing < 90) || (traffic_bearing > 270)) {
 
-				case 0: {
-						/* Ignore */
-						PX4_WARN("TRAFFIC %s! dst %d, hdg %d",
-								tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-								traffic_seperation,
-								traffic_direction);
-						break;
-					}
+					switch (_param_nav_traff_avoid.get()) {
 
-				case 1: {
-						/* Warn only */
-						mavlink_log_critical(&_mavlink_log_pub, "Warning TRAFFIC %s! dst %d, hdg %d\t",
-										tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-										traffic_seperation,
-										traffic_direction);
-						/* EVENT
-							* @description
-							* - ID: {1}
-							* - Distance: {2m}
-							* - Direction: {3} degrees
-							*/
-						events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic"), events::Log::Critical, "Traffic alert",
-								uas_id_int, traffic_seperation, traffic_direction);
-						break;
-					}
+					case 0: {
+							/* Ignore */
+							PX4_WARN("TRAFFIC %s! dst %d, hdg %d",
+									tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+									traffic_seperation,
+									traffic_direction);
+							break;
+						}
 
-				case 2: {
-						/* RTL Mode */
-						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Returning home! dst %d, hdg %d\t",
-										tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-										traffic_seperation,
-										traffic_direction);
-						/* EVENT
-							* @description
-							* - ID: {1}
-							* - Distance: {2m}
-							* - Direction: {3} degrees
-							*/
-						events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_rtl"), events::Log::Critical,
-								"Traffic alert, returning home",
-								uas_id_int, traffic_seperation, traffic_direction);
+					case 1: {
+							/* Warn only */
+							mavlink_log_critical(&_mavlink_log_pub, "Warning TRAFFIC %s! dst %d, hdg %d\t",
+											tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+											traffic_seperation,
+											traffic_direction);
+							/* EVENT
+								* @description
+								* - ID: {1}
+								* - Distance: {2m}
+								* - Direction: {3} degrees
+								*/
+							events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic"), events::Log::Critical, "Traffic alert",
+									uas_id_int, traffic_seperation, traffic_direction);
+							break;
+						}
 
-						// set the return altitude to minimum
-						_rtl.set_return_alt_min(true);
+					case 2: {
+							/* RTL Mode */
+							mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Returning home! dst %d, hdg %d\t",
+											tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+											traffic_seperation,
+											traffic_direction);
+							/* EVENT
+								* @description
+								* - ID: {1}
+								* - Distance: {2m}
+								* - Direction: {3} degrees
+								*/
+							events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_rtl"), events::Log::Critical,
+									"Traffic alert, returning home",
+									uas_id_int, traffic_seperation, traffic_direction);
 
-						// ask the commander to execute an RTL
-						vehicle_command_s vcmd = {};
-						vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH;
-						publish_vehicle_cmd(&vcmd);
-						break;
-					}
+							// set the return altitude to minimum
+							_rtl.set_return_alt_min(true);
 
-				case 3: {
-						/* Land Mode */
-						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Landing! dst %d, hdg % d\t",
-										tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-										traffic_seperation,
-										traffic_direction);
-						/* EVENT
-							* @description
-							* - ID: {1}
-							* - Distance: {2m}
-							* - Direction: {3} degrees
-							*/
-						events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_land"), events::Log::Critical,
-								"Traffic alert, landing",
-								uas_id_int, traffic_seperation, traffic_direction);
-
-						// ask the commander to land
-						vehicle_command_s vcmd = {};
-						vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_LAND;
-						publish_vehicle_cmd(&vcmd);
-						break;
-
-					}
-
-				case 4: {
-						/* Position hold */
-						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Holding position! dst %d, hdg %d\t",
-										tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-										traffic_seperation,
-										traffic_direction);
-						/* EVENT
-							* @description
-							* - ID: {1}
-							* - Distance: {2m}
-							* - Direction: {3} degrees
-							*/
-						events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_hold"), events::Log::Critical,
-								"Traffic alert, holding position",
-								uas_id_int, traffic_seperation, traffic_direction);
-
-						// ask the commander to Loiter
-						vehicle_command_s vcmd = {};
-						vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_LOITER_UNLIM;
-						publish_vehicle_cmd(&vcmd);
-						break;
-
-					}
-
-				case 5: {
-						/*Active CDR*/
-						//Ask the commander to go to avoidance position
-
-						mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Enabling active deconfliction! dst %d, hdg % d, \t",
-							tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
-							traffic_seperation,
-							traffic_direction);
-						
-						double d_cr_bearing = static_cast<double>(cr.bearing);
-
-						mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-						mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-
-						mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
-						mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);
-
-						//invoke resolution here
-						resolution res(
-							cr,
-							self_pos,
-							traffic_pos,
-							horizontal_separation,
-							lookahead,
-							self_heading,
-							tr.heading
-						);
-
-						//only command avoidance when in navigation auto mission mode
-						if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
-						{
-							double avoidance_lat, avoidance_lon, heading_delta;
-							res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
-
-							mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
-							mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
-
-							//Set reposition triplet to avoidance lat/lon
-							position_setpoint_triplet_s *rep = get_reposition_triplet();
-							*rep = *(get_position_setpoint_triplet());
-							rep->next.lat = rep->current.lat;
-							rep->next.lon = rep->current.lon;
-							rep->current.lat = avoidance_lat;
-							rep->current.lon = avoidance_lon;
-
+							// ask the commander to execute an RTL
 							vehicle_command_s vcmd = {};
-							vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
+							vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH;
 							publish_vehicle_cmd(&vcmd);
+							break;
+						}
+
+					case 3: {
+							/* Land Mode */
+							mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Landing! dst %d, hdg % d\t",
+											tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+											traffic_seperation,
+											traffic_direction);
+							/* EVENT
+								* @description
+								* - ID: {1}
+								* - Distance: {2m}
+								* - Direction: {3} degrees
+								*/
+							events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_land"), events::Log::Critical,
+									"Traffic alert, landing",
+									uas_id_int, traffic_seperation, traffic_direction);
+
+							// ask the commander to land
+							vehicle_command_s vcmd = {};
+							vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_LAND;
+							publish_vehicle_cmd(&vcmd);
+							break;
 
 						}
 
-						break;
+					case 4: {
+							/* Position hold */
+							mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Holding position! dst %d, hdg %d\t",
+											tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+											traffic_seperation,
+											traffic_direction);
+							/* EVENT
+								* @description
+								* - ID: {1}
+								* - Distance: {2m}
+								* - Direction: {3} degrees
+								*/
+							events::send<uint64_t, int32_t, int16_t>(events::ID("navigator_traffic_hold"), events::Log::Critical,
+									"Traffic alert, holding position",
+									uas_id_int, traffic_seperation, traffic_direction);
 
+							// ask the commander to Loiter
+							vehicle_command_s vcmd = {};
+							vcmd.command = vehicle_command_s::VEHICLE_CMD_NAV_LOITER_UNLIM;
+							publish_vehicle_cmd(&vcmd);
+							break;
+
+						}
+
+					case 5: {
+							/*Active CDR*/
+							//Ask the commander to go to avoidance position
+
+							mavlink_log_critical(&_mavlink_log_pub, "TRAFFIC: %s Enabling active deconfliction! dst %d, hdg % d, \t",
+								tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
+								traffic_seperation,
+								traffic_direction);
+							
+							double d_cr_bearing = static_cast<double>(cr.bearing);
+
+							mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
+							mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
+
+							mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
+							mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);
+
+							//invoke resolution here
+							resolution res(
+								cr,
+								self_pos,
+								traffic_pos,
+								horizontal_separation,
+								lookahead,
+								self_heading,
+								tr.heading
+							);
+
+							//only command avoidance when in navigation auto mission mode
+							if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
+							{
+								double avoidance_lat, avoidance_lon, heading_delta;
+								res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
+
+								mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
+								mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+
+								//Set reposition triplet to avoidance lat/lon
+								position_setpoint_triplet_s *rep = get_reposition_triplet();
+								*rep = *(get_position_setpoint_triplet());
+								rep->next.lat = rep->current.lat;
+								rep->next.lon = rep->current.lon;
+								rep->current.lat = avoidance_lat;
+								rep->current.lon = avoidance_lon;
+
+								vehicle_command_s vcmd = {};
+								vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
+								publish_vehicle_cmd(&vcmd);
+
+							}
+
+							break;
+
+						}
 					}
 				}
 			}
