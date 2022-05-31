@@ -1200,21 +1200,20 @@ void Navigator::check_traffic()
 	double lat = get_global_position()->lat;
 	double lon = get_global_position()->lon;
 	float alt = get_global_position()->alt;
+	float terrain_alt = _home_pos.alt;
 
 	float self_heading = get_local_position()->heading;
 	float self_velocity_north = _gps_pos.vel_n_m_s;
 	float self_velocity_east =  _gps_pos.vel_e_m_s;
 	float self_vertical_speed = _gps_pos.vel_d_m_s; //negative is up
-	//TODO use AGL, not working in sim
-	float field_elevation = 510.0f;
+	
+	int altitude_threshold = 30;
 
 	std::array<float, 3> self_vel_vector;
 	std::array<float, 3> tr_vel_vector;
 	std::array<float, 3> rel_vel_vector;
 	std::array<double, 3> traffic_pos;
 	std::array<double, 3> self_pos;
-
-	int angle_of_detection = 60;
 
 	// TODO for non-multirotors predicting the future
 	// position as accurately as possible will become relevant
@@ -1322,16 +1321,19 @@ void Navigator::check_traffic()
 
 		double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
 		mavlink_log_info(&_mavlink_log_pub, "Traffic Distance %f", traf_dist);
+		int i_terrain_alt = static_cast<int>(terrain_alt);
+		int i_alt = static_cast<int>(alt);
 
-		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) && (alt > field_elevation)) {
+		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) 
+															  && (i_alt > (i_terrain_alt+altitude_threshold))) {
 
 			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation))
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
-				int traffic_direction = (int)(math::degrees(tr.heading)+180);
-				int i_self_heading = (int)(math::degrees(self_heading));
+				traffic_direction = (int)(math::degrees(tr.heading)+180);
+				i_self_heading = (int)(math::degrees(self_heading));
 
-				mavlink_log_info(&_mavlink_log_pub, "Angle to traffic %d", abs((abs(traffic_direction) - abs(i_self_heading))));
+				//mavlink_log_info(&_mavlink_log_pub, "Angle to traffic %d", abs((abs(traffic_direction) - abs(i_self_heading))));
 
 				//if traffic is behind, don't switch on deconfliction
 				if ((abs((abs(traffic_direction) - abs(i_self_heading))) < angle_of_detection) || 

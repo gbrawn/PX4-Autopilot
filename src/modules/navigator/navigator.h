@@ -335,6 +335,10 @@ public:
 
 	void 		calculate_breaking_stop(double &lat, double &lon, float &yaw);
 
+	int get_traffic_bearing() {return traffic_direction; }
+	int get_self_heading() {return i_self_heading; }
+	int get_detection_angle() {return angle_of_detection; }
+
 private:
 
 	struct traffic_buffer_s {
@@ -345,6 +349,9 @@ private:
 	int _local_pos_sub{-1};
 	int _mission_sub{-1};
 	int _vehicle_status_sub{-1};
+	int traffic_direction;
+	int i_self_heading;
+	int angle_of_detection{60};
 
 	uORB::SubscriptionData<position_controller_status_s>	_position_controller_status_sub{ORB_ID(position_controller_status)};
 
