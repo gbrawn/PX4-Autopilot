@@ -1205,11 +1205,16 @@ void Navigator::check_traffic()
 	float self_velocity_north = _gps_pos.vel_n_m_s;
 	float self_velocity_east =  _gps_pos.vel_e_m_s;
 	float self_vertical_speed = _gps_pos.vel_d_m_s; //negative is up
+	//TODO use AGL, not working in sim
+	float field_elevation = 510.0f;
 
 	std::array<float, 3> self_vel_vector;
 	std::array<float, 3> tr_vel_vector;
+	std::array<float, 3> rel_vel_vector;
 	std::array<double, 3> traffic_pos;
 	std::array<double, 3> self_pos;
+
+	int angle_of_detection = 60;
 
 	// TODO for non-multirotors predicting the future
 	// position as accurately as possible will become relevant
@@ -1222,9 +1227,9 @@ void Navigator::check_traffic()
 	char uas_id[11]; //GUID of incoming UTM messages
 
 	float NAVTrafficAvoidUnmanned = _param_nav_traff_a_radu.get();
-	float NAVTrafficAvoidManned = _param_nav_traff_a_radm.get();
-	float horizontal_separation = NAVTrafficAvoidManned;
-	float vertical_separation = NAVTrafficAvoidManned;
+	//float NAVTrafficAvoidManned = _param_nav_traff_a_radm.get();
+	float horizontal_separation = NAVTrafficAvoidUnmanned;
+	float vertical_separation = NAVTrafficAvoidUnmanned;
 
 	while (changed) {
 
@@ -1267,7 +1272,7 @@ void Navigator::check_traffic()
 		float end_alt = tr.altitude + (d_vert / tr.hor_velocity) * tr.ver_velocity;
 
 		// Predict until the vehicle would have passed this system at its current speed
-		float lookahead = 50.0f; //s
+		float lookahead = 30.0f; //s
 
 		// If the altitude is not getting close to us, do not calculate
 		// the horizontal separation.
@@ -1288,6 +1293,10 @@ void Navigator::check_traffic()
 		self_vel_vector[1] = self_velocity_east;
 		self_vel_vector[2] = self_vertical_speed;
 
+		rel_vel_vector[0] = tr_vel_vector[0] - self_vel_vector[0];
+		rel_vel_vector[1] = tr_vel_vector[1] - self_vel_vector[1];
+		rel_vel_vector[2] = tr_vel_vector[2] - self_vel_vector[2];
+
 		//Establish position vectors
 		traffic_pos[0] = tr.lat;
 		traffic_pos[1] = tr.lon;
@@ -1298,8 +1307,8 @@ void Navigator::check_traffic()
 		self_pos[2] = alt;
 
 		//projecting velocity vector by lookahead time
-		float dbar = lookahead * self_vel_vector[2];
-
+		float dbar = lookahead * (sqrt((self_vel_vector[0]*self_vel_vector[0])+(self_vel_vector[1]*self_vel_vector[1])));
+	
 		//get end points of dbar vector
 		double lat_target,lon_target;
 		waypoint_from_heading_and_distance(lat, lon, self_heading, dbar,
@@ -1311,19 +1320,27 @@ void Navigator::check_traffic()
 		//calculate traffic distance to dbar
 		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
-		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) && (alt > 5.0f)) {
+		double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
+		mavlink_log_info(&_mavlink_log_pub, "Traffic Distance %f", traf_dist);
 
-			double d_cr_distance = static_cast<double>(cr.distance);
+		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) && (alt > field_elevation)) {
 
-			//Checks for relative velocity vector encroachment or separation encroachment
 			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation))
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				int traffic_direction = (int)(math::degrees(tr.heading)+180);
-				int traffic_bearing = (int)(math::degrees(cr.bearing));
+				int i_self_heading = (int)(math::degrees(self_heading));
+
+				mavlink_log_info(&_mavlink_log_pub, "Angle to traffic %d", abs((abs(traffic_direction) - abs(i_self_heading))));
 
 				//if traffic is behind, don't switch on deconfliction
-				if ((traffic_bearing < 90) || (traffic_bearing > 270)) {
+				if ((abs((abs(traffic_direction) - abs(i_self_heading))) < angle_of_detection) || 
+					(abs((abs(traffic_direction) - abs(i_self_heading))) > (360-angle_of_detection))) {
+					//calculate bearing to traffic
+					
+					//mavlink_log_info(&_mavlink_log_pub, "Traffic bearing %d",traffic_direction);
+
+					//mavlink_log_info(&_mavlink_log_pub, "Self heading %d",i_self_heading);
 
 					switch (_param_nav_traff_avoid.get()) {
 
@@ -1435,14 +1452,9 @@ void Navigator::check_traffic()
 								tr.flags & transponder_report_s::PX4_ADSB_FLAGS_VALID_CALLSIGN ? tr.callsign : uas_id,
 								traffic_seperation,
 								traffic_direction);
-							
-							double d_cr_bearing = static_cast<double>(cr.bearing);
 
 							mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
 							mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-
-							mavlink_log_info(&_mavlink_log_pub, "Closest point of approach %f",d_cr_distance);
-							mavlink_log_info(&_mavlink_log_pub, "Conflict bearing %f", d_cr_bearing);
 
 							//invoke resolution here
 							resolution res(
@@ -1461,8 +1473,8 @@ void Navigator::check_traffic()
 								double avoidance_lat, avoidance_lon, heading_delta;
 								res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
 
-								mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
-								mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+								//mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
+								//mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
 
 								//Set reposition triplet to avoidance lat/lon
 								position_setpoint_triplet_s *rep = get_reposition_triplet();
@@ -1686,6 +1698,7 @@ void Navigator::calculate_breaking_stop(double &lat, double &lon, float &yaw)
 					   multirotor_braking_distance, &lat, &lon);
 	yaw = get_local_position()->heading;
 }
+
 
 int Navigator::print_usage(const char *reason)
 {
