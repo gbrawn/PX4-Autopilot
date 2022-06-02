@@ -268,6 +268,10 @@ public:
 	 */
 	void set_cruising_throttle(float throttle = NAN) { _mission_throttle = throttle; }
 
+	void get_closest_point_of_approach(std::array<double, 3> traffic_pos, std::array<double, 3> self_pos, 
+											  std::array<float, 3> self_vel_vector, std::array<float, 3> tr_vel_vector,
+											  float *distance_to_cpa, float *time_to_cpa);
+
 	/**
 	 * Get the yaw acceptance given the current mission item
 	 *

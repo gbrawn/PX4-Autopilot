@@ -1305,6 +1305,35 @@ void Navigator::check_traffic()
 		self_pos[1] = lon;
 		self_pos[2] = alt;
 
+		float distance_to_cpa, time_to_cpa;
+		get_closest_point_of_approach(traffic_pos, self_pos, self_vel_vector, tr_vel_vector,
+											  &distance_to_cpa, &time_to_cpa);
+
+		float traff_speed = sqrt(tr_vel_vector[0]*tr_vel_vector[0] + tr_vel_vector[1] * tr_vel_vector[1]);
+		float self_speed = sqrt(self_vel_vector[0]*self_vel_vector[0] + self_vel_vector[1] * self_vel_vector[1]);
+		
+		//get traffic lat/lon at time tcpa
+		double tr_cpa_lat, tr_cpa_lon;
+		waypoint_from_heading_and_distance(traffic_pos[0], traffic_pos[1], tr.heading, fabs(traff_speed*time_to_cpa),
+											&tr_cpa_lat, &tr_cpa_lon);
+		//get self lat/lon at time tcpa
+		double self_cpa_lat, self_cpa_lon;
+		waypoint_from_heading_and_distance(self_pos[0], self_pos[1], self_heading, fabs(self_speed*time_to_cpa),
+											&self_cpa_lat, &self_cpa_lon);
+
+		float v_e, v_n;
+		get_vector_to_next_waypoint(tr_cpa_lat,tr_cpa_lon,self_cpa_lat,self_cpa_lon,
+									&v_n, &v_e);
+
+		float magnitude = sqrt(v_e*v_e + v_n*v_n);
+		int i_mag = (int)magnitude;
+		//int i_dcpa = (int)distance_to_cpa;
+		//int i_time_to_cpa = (int)time_to_cpa;
+
+		//mavlink_log_info(&_mavlink_log_pub, "Distance to CPA %d", i_dcpa);
+		//mavlink_log_info(&_mavlink_log_pub, "Time to CPA %d", i_time_to_cpa);
+		mavlink_log_info(&_mavlink_log_pub, "Conflict separation is %d", i_mag);
+
 		//projecting velocity vector by lookahead time
 		float dbar = lookahead * (sqrt((self_vel_vector[0]*self_vel_vector[0])+(self_vel_vector[1]*self_vel_vector[1])));
 	
@@ -1327,7 +1356,7 @@ void Navigator::check_traffic()
 		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) 
 															  && (i_alt > (i_terrain_alt+altitude_threshold))) {
 
-			if ((!cr.past_end) && (fabs(cr.distance) <= horizontal_separation))
+			if (magnitude<horizontal_separation)
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				traffic_direction = (int)(math::degrees(tr.heading)+180);
@@ -1336,8 +1365,8 @@ void Navigator::check_traffic()
 				//mavlink_log_info(&_mavlink_log_pub, "Angle to traffic %d", abs((abs(traffic_direction) - abs(i_self_heading))));
 
 				//if traffic is behind, don't switch on deconfliction
-				if ((abs((abs(traffic_direction) - abs(i_self_heading))) < angle_of_detection) || 
-					(abs((abs(traffic_direction) - abs(i_self_heading))) > (360-angle_of_detection))) {
+				//if ((abs((abs(traffic_direction) - abs(i_self_heading))) < angle_of_detection) || 
+					//(abs((abs(traffic_direction) - abs(i_self_heading))) > (360-angle_of_detection))) {
 					//calculate bearing to traffic
 					
 					//mavlink_log_info(&_mavlink_log_pub, "Traffic bearing %d",traffic_direction);
@@ -1459,7 +1488,7 @@ void Navigator::check_traffic()
 							mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
 
 							//invoke resolution here
-							resolution res(
+							/*resolution res(
 								cr,
 								self_pos,
 								traffic_pos,
@@ -1490,13 +1519,13 @@ void Navigator::check_traffic()
 								vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
 								publish_vehicle_cmd(&vcmd);
 
-							}
+							}*/
 
 							break;
 
 						}
 					}
-				}
+				//}
 			}
 
 		}
@@ -1700,6 +1729,33 @@ void Navigator::calculate_breaking_stop(double &lat, double &lon, float &yaw)
 					   multirotor_braking_distance, &lat, &lon);
 	yaw = get_local_position()->heading;
 }
+
+void Navigator::get_closest_point_of_approach(std::array<double, 3> traffic_pos, std::array<double, 3> self_pos, 
+											  std::array<float, 3> self_vel_vector, std::array<float, 3> tr_vel_vector,
+											  float *distance_to_cpa, float *time_to_cpa)
+	{
+		float dx, dy;
+		get_vector_to_next_waypoint(self_pos[0], self_pos[1], traffic_pos[0], traffic_pos[1],
+									&dy, &dx);
+		float dist = sqrt(dx*dx+dy*dy);
+
+		float du = self_vel_vector[0] - tr_vel_vector[0];
+		float dv = self_vel_vector[1] - tr_vel_vector[1];
+
+		float dv2 = du * du + dv * dv;
+
+		if ((dv2 > 0)&&(dv2 < 0.00001f)) {
+			dv2 = 0.00001f;
+		}
+
+		float tcpa = -(du*dx+dv*dy)/dv2;
+
+		float dcpa2 = fabs(dist*dist - tcpa*tcpa*dv2);
+
+		*distance_to_cpa = sqrt(dcpa2);
+
+		*time_to_cpa = tcpa;
+	}
 
 
 int Navigator::print_usage(const char *reason)

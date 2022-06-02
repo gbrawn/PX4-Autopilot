@@ -26,9 +26,7 @@ class resolution
     std::array<double, 3> self_pos;
 
     public:
-        resolution(crosstrack_error_s cr,
-                   std::array<double, 3> tr_pos,
-                   std::array<double, 3> slf_pos,
+        resolution(std::array<double, 3> slf_pos,
                    float horizontal_separation,
                    float lkahd_time,
                    float slf_heading,
