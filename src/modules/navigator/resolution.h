@@ -15,33 +15,24 @@ class resolution
 
     private:
 
-    crosstrack_error_s crosstrack;
-    float lookahead_time;
-    float horizontal_protection_zone;
-    float self_heading;
-    float traf_heading;
-    float buffer = 5.0f;
-
-    std::array<double, 3> traf_pos;
-    std::array<double, 3> self_pos;
+    float _conflict_distance;
+    std::array<double, 3> _self_pos;
+    float _horizontal_separation;
+    float _encroachment;
+    float buffer=5.0;
+    float _heading;
 
     public:
-        resolution(std::array<double, 3> slf_pos,
-                   float horizontal_separation,
-                   float lkahd_time,
-                   float slf_heading,
-                   float traffic_heading)
+        resolution(std::array<double, 3> self_pos, float conflict_distance, float encroachment, float horizontal_separation, float heading)
         {
-            crosstrack = cr;
-            horizontal_protection_zone = horizontal_separation;
-            lookahead_time = lkahd_time;
-            traf_pos = tr_pos;
-            self_pos = slf_pos;
-            self_heading = slf_heading;
-            traf_heading = traffic_heading;
+            _self_pos = self_pos;
+            _conflict_distance = conflict_distance;
+            _horizontal_separation = horizontal_separation; 
+            _encroachment = encroachment;
+            _heading = heading;
         }
         
 
-        void resolve_predicted_conflict(double *avoidance_lat, double *avoidance_lon, double *heading_delta);
+        void resolve_predicted_conflict(double *avoidance_lat, double *avoidance_lon);
 
 };

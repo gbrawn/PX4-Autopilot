@@ -1211,7 +1211,6 @@ void Navigator::check_traffic()
 
 	std::array<float, 3> self_vel_vector;
 	std::array<float, 3> tr_vel_vector;
-	std::array<float, 3> rel_vel_vector;
 	std::array<double, 3> traffic_pos;
 	std::array<double, 3> self_pos;
 
@@ -1292,10 +1291,6 @@ void Navigator::check_traffic()
 		self_vel_vector[1] = self_velocity_east;
 		self_vel_vector[2] = self_vertical_speed;
 
-		rel_vel_vector[0] = tr_vel_vector[0] - self_vel_vector[0];
-		rel_vel_vector[1] = tr_vel_vector[1] - self_vel_vector[1];
-		rel_vel_vector[2] = tr_vel_vector[2] - self_vel_vector[2];
-
 		//Establish position vectors
 		traffic_pos[0] = tr.lat;
 		traffic_pos[1] = tr.lon;
@@ -1325,14 +1320,14 @@ void Navigator::check_traffic()
 		get_vector_to_next_waypoint(tr_cpa_lat,tr_cpa_lon,self_cpa_lat,self_cpa_lon,
 									&v_n, &v_e);
 
-		float magnitude = sqrt(v_e*v_e + v_n*v_n);
-		int i_mag = (int)magnitude;
+		float encroachment_magnitude = sqrt(v_e*v_e + v_n*v_n);
+		//int i_mag = (int)encroachment_magnitude;
 		//int i_dcpa = (int)distance_to_cpa;
 		//int i_time_to_cpa = (int)time_to_cpa;
 
 		//mavlink_log_info(&_mavlink_log_pub, "Distance to CPA %d", i_dcpa);
 		//mavlink_log_info(&_mavlink_log_pub, "Time to CPA %d", i_time_to_cpa);
-		mavlink_log_info(&_mavlink_log_pub, "Conflict separation is %d", i_mag);
+		//mavlink_log_info(&_mavlink_log_pub, "Conflict separation is %d", i_mag);
 
 		//projecting velocity vector by lookahead time
 		float dbar = lookahead * (sqrt((self_vel_vector[0]*self_vel_vector[0])+(self_vel_vector[1]*self_vel_vector[1])));
@@ -1348,15 +1343,15 @@ void Navigator::check_traffic()
 		//calculate traffic distance to dbar
 		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
-		double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
-		mavlink_log_info(&_mavlink_log_pub, "Traffic Distance %f", traf_dist);
+		//double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
+		//mavlink_log_info(&_mavlink_log_pub, "Traffic Distance %f", traf_dist);
 		int i_terrain_alt = static_cast<int>(terrain_alt);
 		int i_alt = static_cast<int>(alt);
 
 		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) 
 															  && (i_alt > (i_terrain_alt+altitude_threshold))) {
 
-			if (magnitude<horizontal_separation)
+			if (encroachment_magnitude<horizontal_separation)
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				traffic_direction = (int)(math::degrees(tr.heading)+180);
@@ -1484,28 +1479,14 @@ void Navigator::check_traffic()
 								traffic_seperation,
 								traffic_direction);
 
-							mavlink_log_info(&_mavlink_log_pub, "Self coords lat %f, lon %f", lat,lon);
-							mavlink_log_info(&_mavlink_log_pub, "Traffic coords lat %f, lon %f", tr.lat, tr.lon);
-
 							//invoke resolution here
-							/*resolution res(
-								cr,
-								self_pos,
-								traffic_pos,
-								horizontal_separation,
-								lookahead,
-								self_heading,
-								tr.heading
-							);
+							resolution res(self_pos, distance_to_cpa,encroachment_magnitude,horizontal_separation, self_heading);
 
 							//only command avoidance when in navigation auto mission mode
 							if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
 							{
-								double avoidance_lat, avoidance_lon, heading_delta;
-								res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon, &heading_delta);
-
-								//mavlink_log_info(&_mavlink_log_pub, "Avoidance Lat %f", avoidance_lat);
-								//mavlink_log_info(&_mavlink_log_pub, "Avoidance Lon %f", avoidance_lon);
+								double avoidance_lat, avoidance_lon;
+								res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon);
 
 								//Set reposition triplet to avoidance lat/lon
 								position_setpoint_triplet_s *rep = get_reposition_triplet();
@@ -1519,7 +1500,7 @@ void Navigator::check_traffic()
 								vcmd.command = vehicle_command_s::VEHICLE_CMD_AVOID;
 								publish_vehicle_cmd(&vcmd);
 
-							}*/
+							}
 
 							break;
 
