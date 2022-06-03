@@ -1270,7 +1270,7 @@ void Navigator::check_traffic()
 		float end_alt = tr.altitude + (d_vert / tr.hor_velocity) * tr.ver_velocity;
 
 		// Predict until the vehicle would have passed this system at its current speed
-		float lookahead = 30.0f; //s
+		float lookahead = 20.0f; //s
 
 		// If the altitude is not getting close to us, do not calculate
 		// the horizontal separation.
@@ -1282,13 +1282,25 @@ void Navigator::check_traffic()
 		// ever be used in normal airspace this implementation would anyway be
 		// inappropriate as it should be replaced with a TCAS compliant solution.
 
+		//-------------MVP DETECTION------------------
+
 		//Establish velocity vectors
 		tr_vel_vector[0] = tr.hor_velocity*sin(tr.heading);
 		tr_vel_vector[1] = tr.hor_velocity*cos(tr.heading);
 		tr_vel_vector[2] = tr.ver_velocity;
 		
-		self_vel_vector[0] = self_velocity_north;
-		self_vel_vector[1] = self_velocity_east;
+		//Using NED frame
+		if ((tr.heading > 90) && (tr.heading < 270))
+		{
+			tr_vel_vector[1] *= -1;
+
+		} else if (tr.heading > 180) {
+			
+			tr_vel_vector[0] *= -1;
+		}
+		
+		self_vel_vector[0] = self_velocity_east;
+		self_vel_vector[1] = self_velocity_north;
 		self_vel_vector[2] = self_vertical_speed;
 
 		//Establish position vectors
@@ -1300,34 +1312,32 @@ void Navigator::check_traffic()
 		self_pos[1] = lon;
 		self_pos[2] = alt;
 
-		float distance_to_cpa, time_to_cpa;
+		//find closest point of approach between aircraft
+		float dcpa, time_to_cpa; 
 		get_closest_point_of_approach(traffic_pos, self_pos, self_vel_vector, tr_vel_vector,
-											  &distance_to_cpa, &time_to_cpa);
+											  &dcpa, &time_to_cpa);
 
-		float traff_speed = sqrt(tr_vel_vector[0]*tr_vel_vector[0] + tr_vel_vector[1] * tr_vel_vector[1]);
 		float self_speed = sqrt(self_vel_vector[0]*self_vel_vector[0] + self_vel_vector[1] * self_vel_vector[1]);
-		
-		//get traffic lat/lon at time tcpa
-		double tr_cpa_lat, tr_cpa_lon;
-		waypoint_from_heading_and_distance(traffic_pos[0], traffic_pos[1], tr.heading, fabs(traff_speed*time_to_cpa),
-											&tr_cpa_lat, &tr_cpa_lon);
+
 		//get self lat/lon at time tcpa
 		double self_cpa_lat, self_cpa_lon;
 		waypoint_from_heading_and_distance(self_pos[0], self_pos[1], self_heading, fabs(self_speed*time_to_cpa),
 											&self_cpa_lat, &self_cpa_lon);
-
+		//get vector between cpa and self
 		float v_e, v_n;
-		get_vector_to_next_waypoint(tr_cpa_lat,tr_cpa_lon,self_cpa_lat,self_cpa_lon,
+		get_vector_to_next_waypoint(lat,lon,self_cpa_lat,self_cpa_lon,
 									&v_n, &v_e);
 
-		float encroachment_magnitude = sqrt(v_e*v_e + v_n*v_n);
-		//int i_mag = (int)encroachment_magnitude;
-		//int i_dcpa = (int)distance_to_cpa;
-		//int i_time_to_cpa = (int)time_to_cpa;
+		float distance_to_cpa = sqrt(v_e*v_e + v_n*v_n);
 
-		//mavlink_log_info(&_mavlink_log_pub, "Distance to CPA %d", i_dcpa);
-		//mavlink_log_info(&_mavlink_log_pub, "Time to CPA %d", i_time_to_cpa);
-		//mavlink_log_info(&_mavlink_log_pub, "Conflict separation is %d", i_mag);
+		//get amount of encroachment in protection zone
+		float encroachment_magnitude = horizontal_separation - dcpa;
+
+		//Publish traffic distance to verify
+		double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
+		mavlink_log_info(&_mavlink_log_pub, "Distance to traffic %f", traf_dist);
+
+		//--------------------PX4-BASED DETECTION --------------------
 
 		//projecting velocity vector by lookahead time
 		float dbar = lookahead * (sqrt((self_vel_vector[0]*self_vel_vector[0])+(self_vel_vector[1]*self_vel_vector[1])));
@@ -1343,32 +1353,24 @@ void Navigator::check_traffic()
 		//calculate traffic distance to dbar
 		get_distance_to_line(&cr, tr.lat, tr.lon, lat, lon, lat_target, lon_target);
 
-		//double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
-		//mavlink_log_info(&_mavlink_log_pub, "Traffic Distance %f", traf_dist);
+		double dist_to_wp = get_distance_to_next_waypoint(lat, lon, get_position_setpoint_triplet()->current.lat,
+																	get_position_setpoint_triplet()->current.lon);
+
 		int i_terrain_alt = static_cast<int>(terrain_alt);
 		int i_alt = static_cast<int>(alt);
 
+		//if vertical sep is not violated, or predicted end altitude is not violating, and above threshold altitude for deconfliction
 		if (((fabsf(alt - tr.altitude) < vertical_separation) || ((end_alt - horizontal_separation) < alt)) 
 															  && (i_alt > (i_terrain_alt+altitude_threshold))) {
-
-			if (encroachment_magnitude<horizontal_separation)
+			
+			//if closest point of approach is violating separation, and cpa is within lookahead time, and next waypoint is beyond conflict.
+			if ((dcpa<horizontal_separation) && (time_to_cpa < lookahead) && (((float)dist_to_wp > (fabs(time_to_cpa*self_speed)))))
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				traffic_direction = (int)(math::degrees(tr.heading)+180);
 				i_self_heading = (int)(math::degrees(self_heading));
 
-				//mavlink_log_info(&_mavlink_log_pub, "Angle to traffic %d", abs((abs(traffic_direction) - abs(i_self_heading))));
-
-				//if traffic is behind, don't switch on deconfliction
-				//if ((abs((abs(traffic_direction) - abs(i_self_heading))) < angle_of_detection) || 
-					//(abs((abs(traffic_direction) - abs(i_self_heading))) > (360-angle_of_detection))) {
-					//calculate bearing to traffic
-					
-					//mavlink_log_info(&_mavlink_log_pub, "Traffic bearing %d",traffic_direction);
-
-					//mavlink_log_info(&_mavlink_log_pub, "Self heading %d",i_self_heading);
-
-					switch (_param_nav_traff_avoid.get()) {
+				switch (_param_nav_traff_avoid.get()) {
 
 					case 0: {
 							/* Ignore */
@@ -1480,7 +1482,7 @@ void Navigator::check_traffic()
 								traffic_direction);
 
 							//invoke resolution here
-							resolution res(self_pos, distance_to_cpa,encroachment_magnitude,horizontal_separation, self_heading);
+							resolution res(self_pos, traffic_pos, distance_to_cpa , encroachment_magnitude,horizontal_separation, self_heading);
 
 							//only command avoidance when in navigation auto mission mode
 							if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
@@ -1506,7 +1508,7 @@ void Navigator::check_traffic()
 
 						}
 					}
-				//}
+
 			}
 
 		}
@@ -1713,15 +1715,15 @@ void Navigator::calculate_breaking_stop(double &lat, double &lon, float &yaw)
 
 void Navigator::get_closest_point_of_approach(std::array<double, 3> traffic_pos, std::array<double, 3> self_pos, 
 											  std::array<float, 3> self_vel_vector, std::array<float, 3> tr_vel_vector,
-											  float *distance_to_cpa, float *time_to_cpa)
+											  float *dcpa, float *time_to_cpa)
 	{
 		float dx, dy;
 		get_vector_to_next_waypoint(self_pos[0], self_pos[1], traffic_pos[0], traffic_pos[1],
 									&dy, &dx);
 		float dist = sqrt(dx*dx+dy*dy);
 
-		float du = self_vel_vector[0] - tr_vel_vector[0];
-		float dv = self_vel_vector[1] - tr_vel_vector[1];
+		float du = tr_vel_vector[0] - self_vel_vector[0];
+		float dv = tr_vel_vector[1] - self_vel_vector[1];
 
 		float dv2 = du * du + dv * dv;
 
@@ -1733,7 +1735,7 @@ void Navigator::get_closest_point_of_approach(std::array<double, 3> traffic_pos,
 
 		float dcpa2 = fabs(dist*dist - tcpa*tcpa*dv2);
 
-		*distance_to_cpa = sqrt(dcpa2);
+		*dcpa = sqrt(dcpa2);
 
 		*time_to_cpa = tcpa;
 	}
