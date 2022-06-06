@@ -15,23 +15,29 @@ class resolution
 
     private:
 
-    float _conflict_distance;
-    std::array<double, 3> _self_pos;
-    std::array<double, 3> _traff_pos;
-    float _horizontal_separation;
-    float _encroachment;
-    float buffer=5.0;
-    float _heading;
+    std::array<double, 3> self_pos;
+    std::array<double, 3> traff_pos;
+    std::array<float, 3> tr_vel;
+    std::array<float, 3> self_vel;
+
+    float conflict_distance;
+    float horizontal_separation;
+    float encroachment;
+    float buffer=10.0;
+    float heading;
+
 
     public:
-        resolution(std::array<double, 3> self_pos, std::array<double, 3> traff_pos, float conflict_distance, float encroachment, float horizontal_separation, float heading)
+        resolution(std::array<double, 3> _self_pos, std::array<double, 3> _traff_pos,
+                   float _conflict_distance, float _encroachment, float _horizontal_separation, float _heading)
         {
-            _self_pos = self_pos;
-            _traff_pos = traff_pos;
-            _conflict_distance = conflict_distance;
-            _horizontal_separation = horizontal_separation; 
-            _encroachment = encroachment;
-            _heading = heading;
+            self_pos = _self_pos;
+            traff_pos = _traff_pos;
+
+            conflict_distance = _conflict_distance;
+            horizontal_separation = _horizontal_separation; 
+            encroachment = _encroachment;
+            heading = _heading;
         }
         
 

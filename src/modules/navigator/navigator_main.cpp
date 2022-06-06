@@ -1209,11 +1209,6 @@ void Navigator::check_traffic()
 	
 	int altitude_threshold = 30;
 
-	std::array<float, 3> self_vel_vector;
-	std::array<float, 3> tr_vel_vector;
-	std::array<double, 3> traffic_pos;
-	std::array<double, 3> self_pos;
-
 	// TODO for non-multirotors predicting the future
 	// position as accurately as possible will become relevant
 	// float vel_n = get_global_position()->vel_n;
@@ -1334,8 +1329,8 @@ void Navigator::check_traffic()
 		float encroachment_magnitude = horizontal_separation - dcpa;
 
 		//Publish traffic distance to verify
-		double traf_dist = get_distance_to_next_waypoint(lat, lon, tr.lat, tr.lon);
-		mavlink_log_info(&_mavlink_log_pub, "Distance to traffic %f", traf_dist);
+		double d_d_hor = static_cast<double>(d_hor);
+		mavlink_log_info(&_mavlink_log_pub, "Distance to traffic %f", d_d_hor);
 
 		//--------------------PX4-BASED DETECTION --------------------
 
@@ -1482,7 +1477,8 @@ void Navigator::check_traffic()
 								traffic_direction);
 
 							//invoke resolution here
-							resolution res(self_pos, traffic_pos, distance_to_cpa , encroachment_magnitude,horizontal_separation, self_heading);
+							resolution res(self_pos, traffic_pos, distance_to_cpa, encroachment_magnitude, 
+										   horizontal_separation, self_heading);
 
 							//only command avoidance when in navigation auto mission mode
 							if (_vstatus.nav_state != vehicle_status_s::NAVIGATION_STATE_AVOID)
@@ -1713,17 +1709,17 @@ void Navigator::calculate_breaking_stop(double &lat, double &lon, float &yaw)
 	yaw = get_local_position()->heading;
 }
 
-void Navigator::get_closest_point_of_approach(std::array<double, 3> traffic_pos, std::array<double, 3> self_pos, 
-											  std::array<float, 3> self_vel_vector, std::array<float, 3> tr_vel_vector,
+void Navigator::get_closest_point_of_approach(std::array<double, 3> tr_position, std::array<double, 3> self_position, 
+											  std::array<float, 3> self_velocity, std::array<float, 3> tr_velocity,
 											  float *dcpa, float *time_to_cpa)
 	{
 		float dx, dy;
-		get_vector_to_next_waypoint(self_pos[0], self_pos[1], traffic_pos[0], traffic_pos[1],
+		get_vector_to_next_waypoint(self_position[0], self_position[1], tr_position[0], tr_position[1],
 									&dy, &dx);
 		float dist = sqrt(dx*dx+dy*dy);
 
-		float du = tr_vel_vector[0] - self_vel_vector[0];
-		float dv = tr_vel_vector[1] - self_vel_vector[1];
+		float du = tr_velocity[0] - self_velocity[0];
+		float dv = tr_velocity[1] - self_velocity[1];
 
 		float dv2 = du * du + dv * dv;
 

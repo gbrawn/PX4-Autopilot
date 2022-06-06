@@ -446,6 +446,11 @@ private:
 	double d_dist_to_projected_hor;
 	double d_dist_to_projected_vert;
 
+	std::array<float, 3> self_vel_vector;
+	std::array<float, 3> tr_vel_vector;
+	std::array<double, 3> traffic_pos;
+	std::array<double, 3> self_pos;
+
 	traffic_buffer_s _traffic_buffer{};
 
 	// update subscriptions
