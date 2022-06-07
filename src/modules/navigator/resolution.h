@@ -1,8 +1,5 @@
 #include "math.h"
 #include <lib/geo/geo.h>
-
-#include <array>
-
 #include <uORB/uORB.h>
 #include <uORB/topics/vehicle_command.h>
 
@@ -15,10 +12,8 @@ class resolution
 
     private:
 
-    std::array<double, 3> self_pos;
-    std::array<double, 3> traff_pos;
-    std::array<float, 3> tr_vel;
-    std::array<float, 3> self_vel;
+    double *self_pos[3];
+    double *traff_pos[3];
 
     float conflict_distance;
     float horizontal_separation;
@@ -28,11 +23,11 @@ class resolution
 
 
     public:
-        resolution(std::array<double, 3> _self_pos, std::array<double, 3> _traff_pos,
+        resolution(double *_self_pos, double *_traff_pos,
                    float _conflict_distance, float _encroachment, float _horizontal_separation, float _heading)
         {
-            self_pos = _self_pos;
-            traff_pos = _traff_pos;
+            *(self_pos) = _self_pos;
+            *(traff_pos) = _traff_pos;
 
             conflict_distance = _conflict_distance;
             horizontal_separation = _horizontal_separation; 

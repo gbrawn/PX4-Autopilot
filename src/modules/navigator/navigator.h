@@ -85,8 +85,6 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/uORB.h>
 
-#include <array>
-
 using namespace time_literals;
 
 /**
@@ -268,8 +266,7 @@ public:
 	 */
 	void set_cruising_throttle(float throttle = NAN) { _mission_throttle = throttle; }
 
-	void get_closest_point_of_approach(std::array<double, 3> traffic_pos, std::array<double, 3> self_pos, 
-											  std::array<float, 3> self_vel_vector, std::array<float, 3> tr_vel_vector,
+	void get_closest_point_of_approach(double *traffic_pos, double *self_pos, float *self_vel_vector, float *tr_vel_vector,
 											  float *distance_to_cpa, float *time_to_cpa);
 
 	/**
@@ -446,10 +443,10 @@ private:
 	double d_dist_to_projected_hor;
 	double d_dist_to_projected_vert;
 
-	std::array<float, 3> self_vel_vector;
-	std::array<float, 3> tr_vel_vector;
-	std::array<double, 3> traffic_pos;
-	std::array<double, 3> self_pos;
+	float self_vel_vector[3];
+	float tr_vel_vector[3];
+	double traffic_pos[3];
+	double self_pos[3];
 
 	traffic_buffer_s _traffic_buffer{};
 

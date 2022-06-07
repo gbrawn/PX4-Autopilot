@@ -1280,8 +1280,8 @@ void Navigator::check_traffic()
 		//-------------MVP DETECTION------------------
 
 		//Establish velocity vectors
-		tr_vel_vector[0] = tr.hor_velocity*sin(tr.heading);
-		tr_vel_vector[1] = tr.hor_velocity*cos(tr.heading);
+		tr_vel_vector[0] = tr.hor_velocity*sinf(tr.heading);
+		tr_vel_vector[1] = tr.hor_velocity*cosf(tr.heading);
 		tr_vel_vector[2] = tr.ver_velocity;
 		
 		//Using NED frame
@@ -1310,7 +1310,7 @@ void Navigator::check_traffic()
 		//find closest point of approach between aircraft
 		float dcpa, time_to_cpa; 
 		get_closest_point_of_approach(traffic_pos, self_pos, self_vel_vector, tr_vel_vector,
-											  &dcpa, &time_to_cpa);
+									 &dcpa, &time_to_cpa);
 
 		float self_speed = sqrt(self_vel_vector[0]*self_vel_vector[0] + self_vel_vector[1] * self_vel_vector[1]);
 
@@ -1335,7 +1335,7 @@ void Navigator::check_traffic()
 		//--------------------PX4-BASED DETECTION --------------------
 
 		//projecting velocity vector by lookahead time
-		float dbar = lookahead * (sqrt((self_vel_vector[0]*self_vel_vector[0])+(self_vel_vector[1]*self_vel_vector[1])));
+		float dbar = lookahead * self_speed;
 	
 		//get end points of dbar vector
 		double lat_target,lon_target;
@@ -1359,7 +1359,7 @@ void Navigator::check_traffic()
 															  && (i_alt > (i_terrain_alt+altitude_threshold))) {
 			
 			//if closest point of approach is violating separation, and cpa is within lookahead time, and next waypoint is beyond conflict.
-			if ((dcpa<horizontal_separation) && (time_to_cpa < lookahead) && (((float)dist_to_wp > (fabs(time_to_cpa*self_speed)))))
+			if ((dcpa<horizontal_separation) && (time_to_cpa < lookahead) && (((float)dist_to_wp > (abs(time_to_cpa*self_speed)))))
 			{	
 				int traffic_seperation = (int)fabsf(cr.distance);
 				traffic_direction = (int)(math::degrees(tr.heading)+180);
@@ -1485,6 +1485,9 @@ void Navigator::check_traffic()
 							{
 								double avoidance_lat, avoidance_lon;
 								res.resolve_predicted_conflict(&avoidance_lat, &avoidance_lon);
+
+								mavlink_log_info(&_mavlink_log_pub, "Avoidance lat %f", avoidance_lat);
+								mavlink_log_info(&_mavlink_log_pub, "Avoidance lon %f", avoidance_lon);
 
 								//Set reposition triplet to avoidance lat/lon
 								position_setpoint_triplet_s *rep = get_reposition_triplet();
@@ -1709,8 +1712,8 @@ void Navigator::calculate_breaking_stop(double &lat, double &lon, float &yaw)
 	yaw = get_local_position()->heading;
 }
 
-void Navigator::get_closest_point_of_approach(std::array<double, 3> tr_position, std::array<double, 3> self_position, 
-											  std::array<float, 3> self_velocity, std::array<float, 3> tr_velocity,
+void Navigator::get_closest_point_of_approach(double *tr_position, double *self_position, 
+											  float *self_velocity, float *tr_velocity,
 											  float *dcpa, float *time_to_cpa)
 	{
 		float dx, dy;
